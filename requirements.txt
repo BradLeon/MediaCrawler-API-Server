@@ -1,0 +1,115 @@
+# ================================
+# MediaCrawler API Server 依赖包
+# ================================
+
+# === 核心框架 ===
+fastapi>=0.110.2
+uvicorn>=0.29.0
+pydantic>=2.5.2
+pydantic-settings>=2.0.0
+python-multipart>=0.0.6
+
+# === 异步HTTP客户端 ===
+httpx>=0.27.0
+aiohttp>=3.9.0
+requests>=2.32.3
+
+# === 浏览器自动化 ===
+playwright>=1.42.0
+
+# === 数据库和存储 ===
+# PostgreSQL异步驱动
+asyncpg>=0.29.0
+# SQLAlchemy ORM
+sqlalchemy>=2.0.0
+# Supabase客户端
+supabase>=2.15.2
+# MySQL异步驱动（原MediaCrawler使用）
+aiomysql>=0.2.0
+
+# === 缓存和队列 ===
+redis>=4.6.0
+celery>=5.3.0
+
+# === 文件操作 ===
+aiofiles>=23.2.1
+pathlib2>=2.3.0
+
+# === 重试和容错 ===
+tenacity>=8.2.2
+
+# === 用户代理和反爬虫 ===
+fake-useragent>=1.4.0
+
+# === HTTP客户端增强 ===
+curl-cffi>=0.6.0b6
+
+# === 图像处理 ===
+Pillow>=10.0.0
+opencv-python>=4.8.0
+
+# === 数据处理 ===
+pandas>=2.2.3
+parsel>=1.9.1
+jieba>=0.42.1
+
+# === 数据可视化 ===
+wordcloud>=1.9.3
+matplotlib>=3.9.0
+
+# === JavaScript执行 ===
+pyexecjs>=1.5.1
+
+# === 配置管理 ===
+python-dotenv>=1.0.1
+
+# === 工具库 ===
+packaging>=20.0
+pytz>=2023.3
+
+# === 开发和测试 ===
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+
+# === 日志和监控 ===
+structlog>=23.0.0
+prometheus-client>=0.17.0
+
+# === 类型检查 ===
+typing-extensions>=4.7.0
+
+# === 安全 ===
+cryptography>=41.0.0
+python-jose>=3.3.0
+passlib>=1.7.4
+bcrypt>=4.0.0
+
+# === 网络代理 ===
+PySocks>=1.7.1
+
+# === 数据序列化 ===
+orjson>=3.9.0
+
+# === 时间处理 ===
+python-dateutil>=2.8.0
+
+# === 环境和系统 ===
+psutil>=5.9.0
+
+# === 异步工具 ===
+asyncio-mqtt>=0.16.0
+
+# === WebSocket支持 ===
+websockets>=11.0.0
+
+# === 数据验证 ===
+email-validator>=2.0.0
+
+# === 文档生成 ===
+# FastAPI自动包含swagger/redoc支持
+
+# === 其他实用工具 ===
+click>=8.1.0
+rich>=13.0.0
+tqdm>=4.65.0 
