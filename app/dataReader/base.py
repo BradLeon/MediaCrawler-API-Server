@@ -121,7 +121,7 @@ class PlatformTableMapping:
         PlatformType.XHS: {
             "content": "xhs_note",
             "comment": "xhs_note_comment", 
-            "creator": "xhs_creator"
+            "creator": "xhs_author"
         },
         PlatformType.DOUYIN: {
             "content": "douyin_aweme",

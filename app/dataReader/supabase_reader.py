@@ -166,7 +166,7 @@ class SupabaseDataReader(BaseDataReader):
             if not self.client:
                 return DataAccessResult(False, message="Supabase client not initialized")
             
-            table_name = self.get_table_name("content")
+            table_name = self.get_table_name("creator")
             query = self.client.table(table_name).select("*").eq("user_id", user_id)
             
             # 应用其他过滤器

@@ -55,7 +55,7 @@ async def get_platforms():
 @router.get("/content/{platform}")
 async def get_content_list(
     platform: str = Path(..., description="平台名称"),
-    source_type: str = Query("json", description="数据源类型"),
+    source_type: str = Query("database", description="数据源类型"),
     limit: int = Query(20, description="返回数量限制"),
     offset: int = Query(0, description="偏移量"),
     task_id: Optional[str] = Query(None, description="任务ID过滤"),
@@ -162,7 +162,7 @@ async def get_content_detail(
 async def get_user_content(
     platform: str = Path(..., description="平台名称"),
     user_id: str = Path(..., description="用户ID"),
-    source_type: str = Query("json", description="数据源类型"),
+    source_type: str = Query("database", description="数据源类型"),
     limit: int = Query(20, description="返回数量限制"),
     offset: int = Query(0, description="偏移量")
 ):
@@ -215,7 +215,7 @@ async def get_user_content(
 async def search_content(
     platform: str = Path(..., description="平台名称"),
     keyword: str = Query(..., description="搜索关键词"),
-    source_type: str = Query("json", description="数据源类型"),
+    source_type: str = Query("database", description="数据源类型"),
     limit: int = Query(20, description="返回数量限制"),
     offset: int = Query(0, description="偏移量")
 ):
@@ -267,7 +267,7 @@ async def search_content(
 @router.get("/task/{task_id}/results")
 async def get_task_results(
     task_id: str = Path(..., description="任务ID"),
-    source_type: str = Query("json", description="数据源类型"),
+    source_type: str = Query("database", description="数据源类型"),
     platform: str = Query("xhs", description="平台名称")
 ):
     """获取任务结果"""
@@ -309,7 +309,7 @@ async def get_task_results(
 @router.get("/stats/{platform}")
 async def get_platform_stats(
     platform: str = Path(..., description="平台名称"),
-    source_type: str = Query("json", description="数据源类型")
+    source_type: str = Query("database", description="数据源类型")
 ):
     """获取平台统计信息"""
     try:
