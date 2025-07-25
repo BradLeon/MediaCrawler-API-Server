@@ -187,6 +187,8 @@ JSON Response ← Formatted Result ← Query Result ← Raw Data
 ### 1. 爬虫任务管理
 
 #### 创建爬虫任务
+
+**搜索模式示例:**
 ```http
 POST /api/v1/tasks
 Content-Type: application/json
@@ -206,6 +208,36 @@ Content-Type: application/json
     "max_retries": 3,
     "timeout": 30
   }
+}
+```
+
+**详情模式示例（小红书需要完整URL）:**
+```http
+POST /api/v1/tasks
+Content-Type: application/json
+
+{
+  "platform": "xhs",
+  "task_type": "detail",
+  "content_ids": ["6877460d00000000110016de"],
+  "xhs_note_urls": ["https://www.xiaohongshu.com/explore/6877460d00000000110016de?xsec_token=ABnNAMdt7IJoQfO_vX4E2YzhxDW4XewzgJU1mAUYppOB8=&xsec_source=pc_user"],
+  "max_count": 1,
+  "max_comments": 20,
+  "headless": false
+}
+```
+
+**其他平台详情模式示例:**
+```http
+POST /api/v1/tasks
+Content-Type: application/json
+
+{
+  "platform": "douyin",
+  "task_type": "detail",
+  "content_ids": ["7123456789012345678"],
+  "max_count": 1,
+  "max_comments": 20
 }
 ```
 
@@ -273,8 +305,10 @@ GET /api/v1/data/content/{platform}?source_type=json&limit=20&offset=0
 
 #### 获取内容详情
 ```http
-GET /api/v1/data/content/{platform}/{content_id}?source_type=json
+GET /api/v1/data/content/{platform}/{content_id}?source_type=database
 ```
+
+**注意**: `source_type` 默认值为 `database`，如不指定则自动使用Supabase数据库作为数据源。
 
 #### 搜索内容
 ```http
@@ -370,6 +404,10 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 DATABASE_URL=sqlite:///./data/app.db
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
+
+# Supabase配置（推荐使用）
+# 主要数据存储使用Supabase PostgreSQL数据库
+# 支持高性能查询和多用户并发访问
 
 # 代理配置
 DEFAULT_ENABLE_PROXY=false
@@ -539,9 +577,9 @@ config = {
 - 使用流式处理大型数据集
 
 #### 存储优化
-- JSON: 适合小规模数据和快速查询
+- **Supabase (推荐)**: 适合生产环境和多用户场景，支持高性能查询和实时数据同步
+- JSON: 适合小规模数据和快速查询  
 - CSV: 适合大规模数据和数据分析
-- Supabase: 适合生产环境和多用户场景
 
 ## 🔧 其他
 

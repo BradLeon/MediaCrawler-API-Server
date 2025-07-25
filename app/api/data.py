@@ -11,7 +11,7 @@ from app.dataReader.base import DataSourceType, PlatformType, QueryFilter
 from app.core.config_manager import get_config_manager, AppConfig
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/data", tags=["数据查询"])
 
 
 @router.get("/health")
@@ -118,7 +118,7 @@ async def get_content_list(
 async def get_content_detail(
     platform: str = Path(..., description="平台名称"),
     content_id: str = Path(..., description="内容ID"),
-    source_type: str = Query("json", description="数据源类型")
+    source_type: str = Query("database", description="数据源类型")
 ):
     """获取单个内容详情"""
     try:

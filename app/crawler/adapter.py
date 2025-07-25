@@ -46,12 +46,13 @@ class CrawlerTask:
     task_type: CrawlerTaskType
     keywords: Optional[List[str]] = None
     content_ids: Optional[List[str]] = None
+    xhs_note_urls: Optional[List[str]] = None
     creator_ids: Optional[List[str]] = None
     max_count: int = 100
     max_comments: int = 50
     start_page: int = 1
     enable_proxy: bool = False
-    headless: bool = True
+    headless: bool = False  # 修改默认值为False，显示浏览器窗口
     enable_comments: bool = True
     enable_sub_comments: bool = False
     save_data_option: str = "db"  # db, json, csv
@@ -75,7 +76,7 @@ class MediaCrawlerAdapter:
     """MediaCrawler 适配器 - 通过进程调用复用原项目功能"""
     
     def __init__(self):
-        self.running_tasks: Dict[str, asyncio.Task] = {}
+        self.running_tasks: Dict[str, Dict[str, Any]] = {}  # 任务状态信息
         self.task_results: Dict[str, CrawlerResult] = {}
         
     async def start_crawler_task(self, task: CrawlerTask) -> str:
@@ -94,6 +95,7 @@ class MediaCrawlerAdapter:
                     "task_type": task.task_type.value,
                     "keywords": task.keywords,
                     "content_ids": task.content_ids,
+                    "xhs_note_urls": task.xhs_note_urls,
                     "creator_ids": task.creator_ids,
                     "max_count": task.max_count,
                     "max_comments": task.max_comments
@@ -105,7 +107,12 @@ class MediaCrawlerAdapter:
                 self._run_mediacrawler_process(task, task_logger)
             )
             
-            self.running_tasks[task.task_id] = async_task
+            self.running_tasks[task.task_id] = {
+                "task": async_task,
+                "status": "running",
+                "done": False,
+                "result": None
+            }
             
             logger.info(f"爬虫任务 {task.task_id} 已启动")
             return task.task_id
@@ -130,10 +137,11 @@ class MediaCrawlerAdapter:
     async def _run_mediacrawler_process(self, task: CrawlerTask, task_logger):
         """运行MediaCrawler进程"""
         result = None
+        temp_config_file = None
         try:
             task_logger.log_event(TaskEventType.TASK_PROGRESS, "开始准备MediaCrawler")
             
-            # 1. 准备配置（现在只是日志记录）
+            # 1. 准备配置（用于日志记录）
             await self._create_temp_config(task)
             
             # 2. 构建执行命令
@@ -142,21 +150,30 @@ class MediaCrawlerAdapter:
             task_logger.log_event(TaskEventType.TASK_PROGRESS, "开始执行MediaCrawler")
             
             # 3. 执行爬虫进程
-            result = await self._execute_crawler_process(cmd, task_logger)
+            result = await self._execute_crawler_process(cmd, task_logger, task)
             
+            # 安全获取消息内容
+            message = result.get('message', result.get('error', '无详细信息'))
             task_logger.log_event(
                 TaskEventType.TASK_COMPLETED if result["success"] else TaskEventType.TASK_FAILED,
-                f"MediaCrawler执行{'成功' if result['success'] else '失败'}: {result['message']}"
+                f"MediaCrawler执行{'成功' if result['success'] else '失败'}: {message}"
             )
             
             # 4. 保存任务结果
-            self.task_results[task.task_id] = result
+            crawler_result = CrawlerResult(
+                task_id=task.task_id,
+                success=result["success"],
+                message=message,
+                data_count=result.get("data_count", 0),
+                error_count=result.get("error_count", 0),
+                data=result.get("data", []),
+                errors=result.get("errors", [])
+            )
+            self.task_results[task.task_id] = crawler_result
             
-            # 5. 更新任务状态
+            # 5. 移除已完成的任务从运行队列
             if task.task_id in self.running_tasks:
-                self.running_tasks[task.task_id]['status'] = 'completed' if result['success'] else 'failed'
-                self.running_tasks[task.task_id]['done'] = True
-                self.running_tasks[task.task_id]['result'] = result
+                del self.running_tasks[task.task_id]
                 
             return result
             
@@ -174,17 +191,24 @@ class MediaCrawlerAdapter:
             }
             
             # 保存错误结果
-            self.task_results[task.task_id] = result
+            crawler_result = CrawlerResult(
+                task_id=task.task_id,
+                success=False,
+                message=error_msg,
+                data_count=0,
+                error_count=1,
+                data=[],
+                errors=[error_msg]
+            )
+            self.task_results[task.task_id] = crawler_result
             
-            # 更新任务状态
+            # 移除失败的任务从运行队列
             if task.task_id in self.running_tasks:
-                self.running_tasks[task.task_id]['status'] = 'failed'
-                self.running_tasks[task.task_id]['done'] = True
-                self.running_tasks[task.task_id]['result'] = result
+                del self.running_tasks[task.task_id]
                 
             return result
     
-    async def _create_temp_config(self, task: CrawlerTask) -> None:
+    async def _create_temp_config(self, task: CrawlerTask) -> Optional[str]:
         """
         准备最终的配置参数
         使用基于Pydantic模型的类型安全配置管理
@@ -249,11 +273,11 @@ class MediaCrawlerAdapter:
             cookies_manager.clear_cookies(platform_str)
             logger.info(f"🗑️  已清除cookies，将重新登录: {platform_str}")
         else:
-            # 尝试加载缓存的cookies
+            # 检查是否有缓存的cookies（不通过命令行传递，MediaCrawler自动加载）
             cached_cookies = cookies_manager.load_cookies(platform_str, max_age_days=7)
             if cached_cookies:
-                cmd.extend(["--cookies", cached_cookies])
-                logger.info(f"🍪 使用缓存的cookies: {platform_str}")
+                # MediaCrawler会自动从browser_data目录加载cookies，避免命令行过长
+                logger.info(f"🍪 有缓存的cookies可用: {platform_str} (MediaCrawler自动加载)")
             else:
                 logger.info(f"📄 未找到有效cookies，将需要重新登录: {platform_str}")
         
@@ -269,8 +293,18 @@ class MediaCrawlerAdapter:
             if task.content_ids:
                 # 根据平台设置相应的内容参数
                 if platform_str == "xhs":
-                    cmd.extend(["--xhs_note_urls", ";".join(task.content_ids)])
-                    logger.info(f"🔧 小红书笔记URL列表: {','.join(task.content_ids)}")
+                    # 小红书使用专门的xhs_note_urls参数，包含完整的安全参数
+                    if task.xhs_note_urls:
+                        # 使用引号包裹URL列表，避免命令行解析问题
+                        urls_param = ";".join(task.xhs_note_urls)
+                        cmd.extend(["--xhs_note_urls", f'"{urls_param}"'])
+                        logger.info(f"🔧 小红书笔记URL列表: {','.join(task.xhs_note_urls)}")
+                    else:
+                        logger.warning("⚠️  小红书详情模式缺少xhs_note_urls参数，可能导致爬取失败")
+                        # 降级处理：使用content_ids构造基础URL（但缺少安全参数）
+                        ids_param = ";".join(task.content_ids)
+                        cmd.extend(["--xhs_note_urls", f'"{ids_param}"'])
+                        logger.info(f"🔧 小红书笔记ID列表(降级): {','.join(task.content_ids)}")
                 
                 elif platform_str == "dy":
                     cmd.extend(["--dy_ids", ";".join(task.content_ids)])
@@ -331,7 +365,7 @@ class MediaCrawlerAdapter:
         logger.info(f"🚀 构建的命令: {' '.join(cmd)}")
         return cmd
     
-    async def _execute_crawler_process(self, cmd: List[str], task_logger) -> Dict[str, Any]:
+    async def _execute_crawler_process(self, cmd: List[str], task_logger, task: CrawlerTask) -> Dict[str, Any]:
         """执行爬虫进程并实时监控进度"""
         try:
             # 异步执行子进程
@@ -377,37 +411,71 @@ class MediaCrawlerAdapter:
             stdout_text = "\n".join(stdout_lines)
             stderr_text = "\n".join(stderr_lines)
             
-            if returncode == 0:
-                # 从输出中解析最终数据数量
-                data_count = self._parse_data_count_from_output(stdout_text)
-                
-                # 🍪 尝试提取并保存新的cookies
-                await self._extract_and_save_cookies(task.platform, stdout_text, stderr_text, task.task_id)
-                
+            # 从输出中解析最终数据数量（MediaCrawler可能输出到stderr）
+            combined_output = stdout_text + "\n" + stderr_text
+            data_count = self._parse_data_count_from_output(combined_output)
+            
+            # 🍪 尝试提取并保存新的cookies
+            await self._extract_and_save_cookies(task.platform, stdout_text, stderr_text, task.task_id)
+            
+            # 检查是否成功：优先检查成功标志，其次检查退出码
+            success_indicators = [
+                "Successfully upserted",  # 数据库插入成功
+                "Xhs Crawler finished",   # 爆取器正常结束
+                "Stop xiaohongshu crawler successful",  # 爆取器正常停止
+                "task_completed",         # 任务完成事件
+                "MediaCrawler执行成功",  # 明确的成功消息
+            ]
+            
+            # 检查错误指示器
+            error_indicators = [
+                "Failed to",
+                "Error:",
+                "Exception:",
+                "Traceback",
+                "执行失败"
+            ]
+            
+            has_success_indicator = any(indicator in combined_output for indicator in success_indicators)
+            has_error_indicator = any(indicator in combined_output for indicator in error_indicators)
+            has_data_operations = "HTTP/2 201 Created" in stderr_text or "HTTP/2 200 OK" in stderr_text
+            clean_exit = returncode == 0
+            
+            # 判断任务是否成功：有成功标志或数据操作成功，且没有严重错误
+            is_success = (has_success_indicator or has_data_operations or clean_exit) and not has_error_indicator
+            
+            if is_success:
+                # 更新最终进度状态
+                task_logger.update_progress("completed", 100.0, items_completed=data_count)
                 task_logger.log_event(
-                    TaskEventType.TASK_PROGRESS,
-                    "MediaCrawler执行成功",
-                    data={"final_data_count": data_count}
+                    TaskEventType.TASK_COMPLETED,
+                    f"MediaCrawler执行成功 (数据: {data_count}条, 退出码: {returncode})",
+                    data={"final_data_count": data_count, "returncode": returncode}
                 )
                 
                 return {
                     "success": True,
                     "data_count": data_count,
                     "stdout": stdout_text,
-                    "stderr": stderr_text
+                    "stderr": stderr_text,
+                    "returncode": returncode,
+                    "message": "数据采集成功"
                 }
             else:
+                # 更新失败状态进度
+                task_logger.update_progress("failed", 0.0)
                 task_logger.log_event(
-                    TaskEventType.CRAWLER_ERROR,
-                    f"MediaCrawler执行失败: 退出码={returncode}",
+                    TaskEventType.TASK_FAILED,
+                    f"MediaCrawler执行失败: 退出码={returncode}, 数据量={data_count}",
                     error=stderr_text
                 )
                 
                 return {
                     "success": False,
-                    "error": f"进程退出码: {returncode}, 错误: {stderr_text}",
+                    "error": f"进程退出码: {returncode}, 数据量: {data_count}",
                     "stdout": stdout_text,
-                    "stderr": stderr_text
+                    "stderr": stderr_text,
+                    "returncode": returncode
                 }
                 
         except Exception as e:
@@ -429,12 +497,13 @@ class MediaCrawlerAdapter:
         try:
             # 解析不同类型的进度信息
             
-            # 1. 登录相关进度
+            # 1. 登录相关进度 - 更通用的模式
             login_patterns = [
-                (r"开始登录", "logging_in", 20.0),
-                (r"登录成功", "logged_in", 30.0),
-                (r"扫码登录", "qrcode_login", 25.0),
-                (r"手机登录", "phone_login", 25.0),
+                (r"开始登录|login.*start|start.*login", "logging_in", 20.0),
+                (r"登录成功|login.*success|success.*login", "logged_in", 30.0),
+                (r"扫码登录|qr.*login|scan.*code", "qrcode_login", 25.0),
+                (r"手机登录|phone.*login|mobile.*login", "phone_login", 25.0),
+                (r"cookies.*load|load.*cookies", "loading_cookies", 15.0),
             ]
             
             for pattern, stage, percent in login_patterns:
@@ -442,12 +511,25 @@ class MediaCrawlerAdapter:
                     task_logger.update_progress(stage, percent)
                     return
             
-            # 2. 爬取进度相关
+            # 2. 爬虫启动和初始化
+            init_patterns = [
+                (r"crawler.*start|start.*crawler|开始.*爬|爬.*开始", "starting_crawler", 35.0),
+                (r"browser.*start|start.*browser|浏览器.*启动", "browser_starting", 30.0),
+                (r"page.*load|load.*page|页面.*加载", "page_loading", 40.0),
+            ]
+            
+            for pattern, stage, percent in init_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    task_logger.update_progress(stage, percent)
+                    return
+            
+            # 3. 爬取进度相关 - 增强模式匹配
             crawl_patterns = [
-                (r"开始爬取", "crawling", 40.0),
-                (r"正在爬取第\s*(\d+)\s*页", "crawling", None),  # 动态计算
-                (r"已爬取\s*(\d+)\s*/\s*(\d+)", "crawling", None),  # 进度比例
-                (r"爬取.*?(\d+)\s*条.*?共\s*(\d+)", "crawling", None),  # 已完成/总数
+                (r"开始爬取|start.*crawl|crawl.*start", "crawling", 50.0),
+                (r"正在爬取第\s*(\d+)\s*页|crawl.*page\s*(\d+)", "crawling", None),
+                (r"已爬取\s*(\d+)\s*/\s*(\d+)|crawled\s*(\d+)\s*/\s*(\d+)", "crawling", None),
+                (r"爬取.*?(\d+)\s*条.*?共\s*(\d+)|collected\s*(\d+).*of\s*(\d+)", "crawling", None),
+                (r"processing.*(\d+).*of.*(\d+)|处理.*(\d+).*总共.*(\d+)", "processing", None),
             ]
             
             for pattern, stage, percent in crawl_patterns:
@@ -457,36 +539,66 @@ class MediaCrawlerAdapter:
                         task_logger.update_progress(stage, percent)
                     else:
                         # 动态计算进度
-                        if "已爬取" in pattern and len(match.groups()) >= 2:
-                            completed = int(match.group(1))
-                            total = int(match.group(2))
-                            if total > 0:
-                                progress_percent = min(40.0 + (completed / total) * 50.0, 90.0)
-                                task_logger.update_progress(
-                                    stage, progress_percent, 
-                                    items_total=total, 
-                                    items_completed=completed
-                                )
+                        groups = [g for g in match.groups() if g is not None]
+                        if len(groups) >= 2:
+                            try:
+                                completed = int(groups[0])
+                                total = int(groups[1])
+                                if total > 0:
+                                    progress_percent = min(50.0 + (completed / total) * 40.0, 90.0)
+                                    task_logger.update_progress(
+                                        stage, progress_percent, 
+                                        items_total=total, 
+                                        items_completed=completed
+                                    )
+                            except ValueError:
+                                pass
                     return
             
-            # 3. 数据保存进度
+            # 4. 数据保存进度 - 包含更多变体
             save_patterns = [
-                (r"开始保存", "saving", 90.0),
-                (r"保存.*?(\d+)\s*条", "saving", 95.0),
-                (r"保存完成", "completed", 100.0),
+                (r"开始保存|start.*sav|sav.*start", "saving", 90.0),
+                (r"保存.*?(\d+)\s*条|sav.*(\d+).*item|(\d+).*saved", "saving", 95.0),
+                (r"保存完成|sav.*complete|complete.*sav", "saving_completed", 98.0),
+                (r"upsert.*success|successfully.*upsert", "database_saved", 99.0),
+                (r"task.*complete|complete.*task|任务.*完成", "completed", 100.0),
             ]
             
             for pattern, stage, percent in save_patterns:
                 match = re.search(pattern, line, re.IGNORECASE)
                 if match:
                     task_logger.update_progress(stage, percent)
-                    if len(match.groups()) >= 1:
+                    if match.groups():
                         try:
-                            saved_count = int(match.group(1))
-                            task_logger.update_progress(
-                                stage, percent,
-                                items_completed=saved_count
-                            )
+                            # 尝试提取数字
+                            numbers = [g for g in match.groups() if g and g.isdigit()]
+                            if numbers:
+                                saved_count = int(numbers[0])
+                                task_logger.update_progress(
+                                    stage, percent,
+                                    items_completed=saved_count
+                                )
+                        except:
+                            pass
+                    return
+            
+            # 5. 通用进度信息 - 捕获其他有用信息
+            general_patterns = [
+                (r"(\d+)%.*complete|complete.*(\d+)%", "processing", None),
+                (r"step\s*(\d+)|阶段\s*(\d+)", "processing", None),
+            ]
+            
+            for pattern, stage, percent in general_patterns:
+                match = re.search(pattern, line, re.IGNORECASE)
+                if match:
+                    if percent is None and match.groups():
+                        try:
+                            # 从百分比中提取进度
+                            percent_match = [g for g in match.groups() if g and g.isdigit()]
+                            if percent_match:
+                                extracted_percent = float(percent_match[0])
+                                if 0 <= extracted_percent <= 100:
+                                    task_logger.update_progress(stage, extracted_percent)
                         except:
                             pass
                     return
@@ -535,6 +647,18 @@ class MediaCrawlerAdapter:
         try:
             import re
             # 查找类似 "共爬取 123 条数据" 的模式
+            # 特殊处理：统计Supabase操作成功次数
+            supabase_success_count = len(re.findall(r"Successfully upserted.*?note_id", output))
+            if supabase_success_count > 0:
+                return supabase_success_count
+            
+            # 统计HTTP成功响应
+            http_success_count = len(re.findall(r"HTTP/2 (200|201)", output))
+            if http_success_count > 0:
+                # 每个笔记通常有一个查询和一个插入，所以除以2
+                return max(1, http_success_count // 2)
+            
+            # 原有模式匹配
             patterns = [
                 r"共爬取\s*(\d+)\s*条",
                 r"获取\s*(\d+)\s*条数据",
@@ -559,10 +683,11 @@ class MediaCrawlerAdapter:
         base_status = {"task_id": task_id}
         
         if task_id in self.running_tasks:
-            task = self.running_tasks[task_id]
+            task_info = self.running_tasks[task_id]
+            task = task_info["task"]
             base_status.update({
-                "status": "running" if not task.done() else "completed",
-                "done": task.done()
+                "status": task_info["status"],
+                "done": task_info["done"]
             })
         elif task_id in self.task_results:
             result = self.task_results[task_id]
@@ -605,7 +730,8 @@ class MediaCrawlerAdapter:
     async def stop_task(self, task_id: str) -> bool:
         """停止任务"""
         if task_id in self.running_tasks:
-            task = self.running_tasks[task_id]
+            task_info = self.running_tasks[task_id]
+            task = task_info["task"]
             task.cancel()
             
             try:

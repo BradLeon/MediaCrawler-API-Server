@@ -56,7 +56,7 @@ class CrawlerConfig(BaseModel):
     enable_proxy: bool = False
     proxy_provider: Optional[str] = None
     proxy_config: Optional[Dict[str, Any]] = None
-    headless: bool = True
+    headless: bool = False  # 修改默认值为False，显示浏览器窗口
     user_agent: Optional[str] = None
     window_size: str = "1920,1080"
     max_retries: int = 3
@@ -80,7 +80,7 @@ class CrawlerConfig(BaseModel):
 # ===== 3. 数据存储级配置模型 =====
 class StorageConfig(BaseModel):
     """数据存储配置"""
-    source_type: str = Field(..., pattern=r'^(json|csv|supabase)$')
+    source_type: str = Field(..., pattern=r'^(json|csv|database)$')
     platform: Optional[str] = None
     connection_timeout: int = Field(30, ge=5, le=120)
     retry_times: int = Field(3, ge=0, le=10)
@@ -174,7 +174,7 @@ class ConfigManager:
         # 1. 基础默认配置
         base_config = {
             "platform": platform,
-            "headless": True,
+            "headless": False,  # 修改默认值为False，显示浏览器窗口
             "enable_proxy": False,
             "proxy_provider": None,
             "proxy_config": None,

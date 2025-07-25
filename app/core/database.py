@@ -38,13 +38,22 @@ def create_supabase_client() -> Optional[Client]:
     if _supabase_client is not None:
         return _supabase_client
     
-    if not settings.supabase_url or not settings.supabase_key:
-        logger.warning("Supabase URL or key not configured")
+    # 直接从.env文件读取配置
+    from dotenv import dotenv_values
+    import os
+    
+    # 优先从.env文件读取
+    env_vars = dotenv_values('.env')
+    supabase_url = env_vars.get('SUPABASE_URL') or os.getenv('SUPABASE_URL')
+    supabase_key = env_vars.get('SUPABASE_KEY') or os.getenv('SUPABASE_KEY')
+    
+    if not supabase_url or not supabase_key:
+        logger.warning(f"Supabase配置不完整 - URL: {'✓' if supabase_url else '✗'}, Key: {'✓' if supabase_key else '✗'}")
         return None
     
     try:
-        _supabase_client = create_client(settings.supabase_url, settings.supabase_key)
-        logger.info("Supabase client created successfully")
+        _supabase_client = create_client(supabase_url, supabase_key)
+        logger.info(f"Supabase client created successfully - URL: {supabase_url[:30]}...")
         return _supabase_client
     except Exception as e:
         logger.error(f"Failed to create Supabase client: {e}")

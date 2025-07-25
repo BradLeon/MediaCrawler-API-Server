@@ -113,6 +113,7 @@ class SupabaseDataReader(BaseDataReader):
         """根据ID获取单个内容"""
         try:
             if not self.client:
+                logger.error("Supabase client not initialized")
                 return DataAccessResult(False, message="Supabase client not initialized")
             
             table_name = self.get_table_name("content")

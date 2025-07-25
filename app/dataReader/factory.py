@@ -44,7 +44,7 @@ class DataReaderFactory:
             elif source_type == DataSourceType.CSV:
                 from app.dataReader.csv_reader import CsvDataReader
                 reader = CsvDataReader(reader_config)
-            elif source_type == DataSourceType.SUPABASE:
+            elif source_type == DataSourceType.DATABASE:
                 from app.dataReader.supabase_reader import SupabaseDataReader
                 reader = SupabaseDataReader(reader_config)
             else:

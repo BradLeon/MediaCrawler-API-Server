@@ -64,9 +64,17 @@ class Settings(BaseSettings):
     enable_metrics: bool = Field(default=True, description="是否启用指标收集")
     metrics_port: int = Field(default=9090, description="指标服务端口")
     
-    # Supabase配置（兼容原有项目）
-    supabase_url: Optional[str] = Field(default=None, env="SUPABASE_URL", description="Supabase URL")
-    supabase_key: Optional[str] = Field(default=None, env="SUPABASE_KEY", description="Supabase匿名密钥")
+    # Supabase配置
+    supabase_url: Optional[str] = Field(
+        default=None, 
+        env= "SEO_SUPABASE_URL", 
+        description="Supabase URL"
+    )
+    supabase_key: Optional[str] = Field(
+        default=None, 
+        env="SEO_SUPABASE_ANON_KEY", 
+        description="Supabase匿名密钥"
+    )
     
     # 数据存储选项
     save_data_option: str = Field(default="db", description="数据保存选项: db/json/csv")
@@ -170,9 +178,12 @@ class Settings(BaseSettings):
 
 
 # 全局配置实例
-settings = Settings()
+_settings = None
 
 
 def get_settings() -> Settings:
     """获取应用配置实例"""
-    return settings 
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings 

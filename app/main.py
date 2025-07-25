@@ -89,12 +89,13 @@ class CrawlerTaskRequest(BaseModel):
     task_type: str = Field(..., description="任务类型(search, detail, creator)")
     keywords: Optional[List[str]] = None
     content_ids: Optional[List[str]] = None
+    xhs_note_urls: Optional[List[str]] = Field(None, description="小红书完整URL列表(detail模式必需,需包含xsec_token&xsec_source)")
     creator_ids: Optional[List[str]] = None
     max_count: int = Field(default=100, ge=1, le=1000)
     max_comments: int = Field(default=50, ge=0, le=500)
     start_page: int = Field(default=1, ge=1)
     enable_proxy: bool = False
-    headless: bool = True
+    headless: bool = False  # 修改默认值为False，显示浏览器窗口
     enable_comments: bool = True
     enable_sub_comments: bool = False
     save_data_option: str = Field(default="db", pattern="^(db|json|csv)$")
@@ -154,10 +155,18 @@ PLATFORM_MAPPING = {
 @app.get("/")
 async def root():
     """健康检查"""
+    import os
+    from app.core.config import get_settings
+    settings = get_settings()
     return {
         "message": "MediaCrawler API Server is running",
         "version": "1.0.0",
-        "supported_platforms": list(PLATFORM_MAPPING.keys())
+        "supported_platforms": list(PLATFORM_MAPPING.keys()),
+        "supabase_configured": bool(settings.supabase_url and settings.supabase_key),
+        "supabase_url": settings.supabase_url[:30] + "..." if settings.supabase_url else None,
+        "seo_supabase_url": os.getenv("SEO_SUPABASE_URL", "NOT_FOUND")[:30] + "..." if os.getenv("SEO_SUPABASE_URL") else "NOT_FOUND",
+        "old_supabase_url": os.getenv("SUPABASE_URL", "NOT_FOUND")[:30] + "..." if os.getenv("SUPABASE_URL") else "NOT_FOUND",
+        "cwd": os.getcwd()
     }
 
 
@@ -188,8 +197,11 @@ async def create_crawler_task(
         if request.task_type == "search" and not request.keywords:
             raise HTTPException(status_code=400, detail="搜索模式需要提供keywords参数")
         
-        if request.task_type == "detail" and not request.content_ids:
-            raise HTTPException(status_code=400, detail="详情模式需要提供content_ids参数")
+        if request.task_type == "detail":
+            if not request.content_ids:
+                raise HTTPException(status_code=400, detail="详情模式需要提供content_ids参数")
+            if request.platform == "xhs" and not request.xhs_note_urls:
+                raise HTTPException(status_code=400, detail="小红书详情模式需要提供xhs_note_urls参数(包含xsec_token和xsec_source的完整URL)")
         
         if request.task_type == "creator" and not request.creator_ids:
             raise HTTPException(status_code=400, detail="创作者模式需要提供creator_ids参数")
@@ -211,6 +223,7 @@ async def create_crawler_task(
             task_type=task_type,
             keywords=request.keywords,
             content_ids=request.content_ids,
+            xhs_note_urls=request.xhs_note_urls,
             creator_ids=request.creator_ids,
             max_count=request.max_count,
             max_comments=request.max_comments,

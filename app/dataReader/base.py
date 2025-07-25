@@ -224,14 +224,16 @@ class PlatformTableMapping:
 class QueryFilter:
     """查询过滤器类"""
     
-    def __init__(self):
-        self.limit: int = 100
-        self.offset: int = 0
-        self.task_id: Optional[str] = None
-        self.user_id: Optional[str] = None
-        self.keyword: Optional[str] = None
-        self.start_time: Optional[datetime] = None
-        self.end_time: Optional[datetime] = None
+    def __init__(self, limit: int = 100, offset: int = 0, task_id: Optional[str] = None, 
+                 user_id: Optional[str] = None, keyword: Optional[str] = None,
+                 start_time: Optional[datetime] = None, end_time: Optional[datetime] = None):
+        self.limit: int = limit
+        self.offset: int = offset
+        self.task_id: Optional[str] = task_id
+        self.user_id: Optional[str] = user_id
+        self.keyword: Optional[str] = keyword
+        self.start_time: Optional[datetime] = start_time
+        self.end_time: Optional[datetime] = end_time
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
