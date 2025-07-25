@@ -87,7 +87,6 @@ async def get_content_list(
             limit=limit,
             offset=offset,
             task_id=task_id,
-            user_id=user_id,
             keyword=keyword
         )
         
@@ -158,15 +157,15 @@ async def get_content_detail(
         raise HTTPException(status_code=500, detail=f"获取内容详情失败: {str(e)}")
 
 
-@router.get("/user/{platform}/{user_id}/content")
-async def get_user_content(
+@router.get("/creator/{platform}/{user_id}/profile")
+async def get_creator_profile(
     platform: str = Path(..., description="平台名称"),
-    user_id: str = Path(..., description="用户ID"),
+    user_id: str = Path(..., description="创作者ID"),
     source_type: str = Query("database", description="数据源类型"),
     limit: int = Query(20, description="返回数量限制"),
     offset: int = Query(0, description="偏移量")
 ):
-    """获取用户内容"""
+    """获取创作者基本资料信息"""
     try:
         # 验证参数
         try:
@@ -183,8 +182,7 @@ async def get_user_content(
         # 创建查询过滤器
         filters = QueryFilter(
             limit=limit,
-            offset=offset,
-            user_id=user_id
+            offset=offset
         )
         
         # 查询数据
@@ -199,7 +197,7 @@ async def get_user_content(
             "limit": limit,
             "offset": offset,
             "platform": platform,
-            "user_id": user_id,
+            "creator_id": user_id,
             "source_type": source_type,
             "message": result.message
         }
@@ -207,8 +205,61 @@ async def get_user_content(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get user content: {e}")
-        raise HTTPException(status_code=500, detail=f"获取用户内容失败: {str(e)}")
+        logger.error(f"Failed to get creator profile: {e}")
+        raise HTTPException(status_code=500, detail=f"获取创作者资料失败: {str(e)}")
+
+
+@router.get("/creator/{platform}/{user_id}/content")
+async def get_creator_content(
+    platform: str = Path(..., description="平台名称"),
+    user_id: str = Path(..., description="创作者ID"),
+    source_type: str = Query("database", description="数据源类型"),
+    limit: int = Query(20, description="返回数量限制"),
+    offset: int = Query(0, description="偏移量")
+):
+    """获取创作者发布的所有内容"""
+    try:
+        # 验证参数
+        try:
+            data_source = DataSourceType(source_type)
+            platform_type = PlatformType(platform)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"无效的参数: {str(e)}")
+        
+        # 创建数据读取器
+        reader = await DataReaderFactory.get_reader(data_source, platform_type)
+        if not reader:
+            raise HTTPException(status_code=500, detail=f"无法创建{source_type}数据读取器")
+        
+        # 创建查询过滤器
+        filters = QueryFilter(
+            limit=limit,
+            offset=offset
+        )
+        
+        # 查询创作者发布的内容
+        result = await reader.get_creator_content(platform_type, user_id, filters)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.message)
+        
+        return {
+            "data": result.data,
+            "total": result.total,
+            "limit": limit,
+            "offset": offset,
+            "platform": platform,
+            "creator_id": user_id,
+            "source_type": source_type,
+            "content_type": "posts",
+            "message": result.message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get creator content: {e}")
+        raise HTTPException(status_code=500, detail=f"获取创作者内容失败: {str(e)}")
 
 
 @router.get("/search/{platform}")

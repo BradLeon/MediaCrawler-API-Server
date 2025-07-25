@@ -223,6 +223,37 @@ class SupabaseDataReader(BaseDataReader):
             logger.error(f"Failed to search content: {e}")
             return DataAccessResult(False, message=f"Failed to search content: {str(e)}", error=e)
     
+    async def get_creator_content(self,
+                                platform: PlatformType,
+                                user_id: str,
+                                filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取创作者发布的所有内容"""
+        try:
+            if not self.client:
+                return DataAccessResult(False, message="Supabase client not initialized")
+            
+            table_name = self.get_table_name("content")
+            query = self.client.table(table_name).select("*").eq("author_id", user_id)
+            
+            # 应用其他过滤器
+            if filters:
+                query = self._apply_filters(query, filters)
+            else:
+                query = query.limit(100)
+            
+            response = query.execute()
+            
+            return DataAccessResult(
+                success=True,
+                data=response.data,
+                total=len(response.data),
+                message="Creator content retrieved successfully"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get creator content: {e}")
+            return DataAccessResult(False, message=f"Failed to get creator content: {str(e)}", error=e)
+    
     async def get_task_results(self, task_id: str) -> DataAccessResult:
         """获取任务结果"""
         try:
@@ -275,8 +306,6 @@ class SupabaseDataReader(BaseDataReader):
         """应用查询过滤器"""
         if filters.task_id:
             query = query.eq("task_id", filters.task_id)
-        if filters.user_id:
-            query = query.eq("user_id", filters.user_id)
         if filters.start_time:
             query = query.gte("created_at", filters.start_time.isoformat())
         if filters.end_time:

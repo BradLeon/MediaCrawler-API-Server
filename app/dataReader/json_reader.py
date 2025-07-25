@@ -183,16 +183,48 @@ class JsonDataReader(BaseDataReader):
                              filters: Optional[QueryFilter] = None) -> DataAccessResult:
         """获取用户内容"""
         try:
-            # 创建包含user_id过滤条件的新过滤器
-            if not filters:
-                filters = QueryFilter()
-            filters.user_id = user_id
+            # 直接使用get_content_list，但需要特殊的author_id过滤
+            # 由于移除了QueryFilter中的user_id，我们需要在这里特殊处理
+            result = await self.get_content_list(platform, filters)
             
-            return await self.get_content_list(platform, filters)
+            # 手动过滤结果，只返回匹配author_id的内容
+            if result.success and result.data:
+                filtered_data = [
+                    item for item in result.data 
+                    if item.get("author_id") == user_id
+                ]
+                result.data = filtered_data
+                result.total = len(filtered_data)
+            
+            return result
             
         except Exception as e:
             logger.error(f"Failed to get user content from JSON: {e}")
             return DataAccessResult(False, message=f"Failed to get user content: {str(e)}", error=e)
+    
+    async def get_creator_content(self,
+                                platform: PlatformType,
+                                user_id: str,
+                                filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取创作者发布的所有内容"""
+        try:
+            # 直接使用get_content_list，然后手动过滤author_id
+            result = await self.get_content_list(platform, filters)
+            
+            # 手动过滤结果，只返回匹配author_id的内容
+            if result.success and result.data:
+                filtered_data = [
+                    item for item in result.data 
+                    if item.get("author_id") == user_id
+                ]
+                result.data = filtered_data
+                result.total = len(filtered_data)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get creator content from JSON: {e}")
+            return DataAccessResult(False, message=f"Failed to get creator content: {str(e)}", error=e)
     
     async def search_content(self,
                            platform: PlatformType,
@@ -289,8 +321,6 @@ class JsonDataReader(BaseDataReader):
             if filters.task_id and item.get("task_id") != filters.task_id:
                 continue
             
-            if filters.user_id and item.get("user_id") != filters.user_id:
-                continue
             
             if filters.keyword:
                 # 在标题和描述中搜索关键词

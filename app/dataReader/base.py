@@ -225,12 +225,11 @@ class QueryFilter:
     """查询过滤器类"""
     
     def __init__(self, limit: int = 100, offset: int = 0, task_id: Optional[str] = None, 
-                 user_id: Optional[str] = None, keyword: Optional[str] = None,
+                 keyword: Optional[str] = None,
                  start_time: Optional[datetime] = None, end_time: Optional[datetime] = None):
         self.limit: int = limit
         self.offset: int = offset
         self.task_id: Optional[str] = task_id
-        self.user_id: Optional[str] = user_id
         self.keyword: Optional[str] = keyword
         self.start_time: Optional[datetime] = start_time
         self.end_time: Optional[datetime] = end_time
@@ -244,8 +243,6 @@ class QueryFilter:
         
         if self.task_id:
             result["task_id"] = self.task_id
-        if self.user_id:
-            result["user_id"] = self.user_id
         if self.keyword:
             result["keyword"] = self.keyword
         if self.start_time:
@@ -303,6 +300,14 @@ class BaseDataReader(ABC):
                              user_id: str,
                              filters: Optional[QueryFilter] = None) -> DataAccessResult:
         """获取用户内容"""
+        pass
+
+    @abstractmethod
+    async def get_creator_content(self,
+                                platform: PlatformType,
+                                user_id: str,
+                                filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取创作者发布的所有内容"""
         pass
 
     @abstractmethod 
