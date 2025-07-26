@@ -280,6 +280,26 @@ class JsonDataReader(BaseDataReader):
             logger.error(f"Failed to get platform stats from JSON: {e}")
             return {}
     
+    async def get_search_ranking(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索排序结果 (JSON格式暂不支持)"""
+        return DataAccessResult(
+            success=False, 
+            message="Search ranking not supported in JSON reader"
+        )
+    
+    async def get_search_details(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索结果的详细内容 (JSON格式暂不支持)"""
+        return DataAccessResult(
+            success=False, 
+            message="Search details not supported in JSON reader"
+        )
+    
     def _find_content_files(self, content_type: str) -> List[str]:
         """查找指定类型的JSON文件"""
         try:

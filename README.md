@@ -18,13 +18,33 @@ MediaCrawler API Server 是一个基于 FastAPI 框架构建的高性能社交�
 
 ### 🎯 核心特性
 
-- 🚀 **多平台支持**: 支持小红书、抖音、快手、B站、微博、百度贴吧、知乎等7大主流平台
-- 🔧 **统一接口**: 提供标准化的 RESTful API，简化多平台数据采集
+- ✅ **小红书完全支持**: 目前完全支持小红书平台的所有功能
+  - 🔍 搜索结果采集 (search)
+  - 📄 笔记内容采集 (content)
+  - 👤 创作者信息采集 (creator)
+  - 📊 搜索排序和详情API
+- 🔧 **统一接口**: 提供标准化的 RESTful API，简化数据采集流程
 - 🛡️ **类型安全**: 基于 Pydantic 模型的完整类型检查和配置验证
-- 📊 **多存储支持**: 支持 JSON、CSV、Supabase 等多种数据存储方式
+- 🗄️ **Supabase存储**: 生产环境推荐使用 Supabase PostgreSQL 数据库
 - 🔄 **异步处理**: 基于 FastAPI 的高性能异步处理架构
 - 🎛️ **灵活配置**: 支持多层级配置管理，满足不同场景需求
 - 📈 **实时监控**: 提供任务状态监控、进度跟踪和日志管理
+- 🛠️ **命令行工具**: 提供原生 MediaCrawler 命令行工具支持
+
+## ⚠️ 重要说明
+
+### 平台支持状态
+- **完全支持**: 仅 **小红书 (XHS)** 平台
+- **其他平台**: 抖音、快手、B站、微博、百度贴吧、知乎等平台提供基础功能，但可能存在兼容性问题
+
+### 数据源类型
+- **生产推荐**: `database` (Supabase PostgreSQL)
+- **开发测试**: `json` 和 `csv` 格式仍可用，但不推荐生产环境使用
+
+### 支持的采集类型
+- **搜索结果采集**: `search` - 基于关键词搜索内容
+- **笔记内容采集**: `content` - 采集特定笔记详情
+- **创作者信息采集**: `creator` - 采集创作者资料和作品
 
 ## 🏗️ 设计思想
 
@@ -182,103 +202,100 @@ Data API Request → DataReaderFactory → DataReader → DataSource
 JSON Response ← Formatted Result ← Query Result ← Raw Data
 ```
 
-## 📡 接口规范
+## 📡 完整 API 接口规范
 
-### 1. 爬虫任务管理
+### 1. 爬虫任务管理 API
 
-#### 创建爬虫任务
+#### 1.1 创建爬虫任务
 
-**搜索模式示例:**
-```http
-POST /api/v1/tasks
-Content-Type: application/json
-
-{
+**小红书搜索模式:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/tasks" \
+-H "Content-Type: application/json" \
+-d '{
   "platform": "xhs",
   "task_type": "search",
-  "keywords": ["美食", "旅行"],
-  "max_count": 100,
-  "max_comments": 50,
+  "keywords": ["车漆刮蹭修复", "汽车保养"],
+  "max_count": 50,
+  "max_comments": 20,
   "headless": true,
   "enable_proxy": false,
-  "save_data_option": "db",
-  "config": {
-    "enable_proxy": false,
-    "headless": true,
-    "max_retries": 3,
-    "timeout": 30
-  }
-}
+  "save_data_option": "db"
+}'
 ```
 
-**详情模式示例（小红书需要完整URL）:**
-```http
-POST /api/v1/tasks
-Content-Type: application/json
-
-{
+**小红书笔记详情模式:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/tasks" \
+-H "Content-Type: application/json" \
+-d '{
   "platform": "xhs",
   "task_type": "detail",
   "content_ids": ["6877460d00000000110016de"],
-  "xhs_note_urls": ["https://www.xiaohongshu.com/explore/6877460d00000000110016de?xsec_token=ABnNAMdt7IJoQfO_vX4E2YzhxDW4XewzgJU1mAUYppOB8=&xsec_source=pc_user"],
+  "xhs_note_urls": ["https://www.xiaohongshu.com/explore/6877460d00000000110016de?xsec_token=ABcd123&xsec_source=pc_user"],
   "max_count": 1,
   "max_comments": 20,
   "headless": false
-}
+}'
 ```
 
-**其他平台详情模式示例:**
-```http
-POST /api/v1/tasks
-Content-Type: application/json
-
-{
-  "platform": "douyin",
-  "task_type": "detail",
-  "content_ids": ["7123456789012345678"],
-  "max_count": 1,
-  "max_comments": 20
-}
+**小红书创作者模式:**
+```bash
+curl -X POST "http://localhost:8000/api/v1/tasks" \
+-H "Content-Type: application/json" \
+-d '{
+  "platform": "xhs",
+  "task_type": "creator", 
+  "creator_ids": ["user123456"],
+  "max_count": 30,
+  "max_comments": 10,
+  "headless": true
+}'
 ```
 
-**响应:**
+**响应示例:**
 ```json
 {
-  "task_id": "uuid-string",
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
   "message": "任务已创建并开始执行"
 }
 ```
 
-#### 查询任务状态
-```http
-GET /api/v1/tasks/{task_id}/status
+#### 1.2 查询任务状态
+```bash
+curl "http://localhost:8000/api/v1/tasks/{task_id}/status"
 ```
 
-**响应:**
+**响应示例:**
 ```json
 {
-  "task_id": "uuid-string",
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "running",
   "done": false,
+  "success": null,
+  "message": "正在执行数据采集...",
+  "data_count": 45,
+  "error_count": 2,
   "progress": {
     "current_stage": "数据采集中",
     "progress_percent": 45.6,
     "items_completed": 45,
     "items_total": 100,
-    "items_failed": 2
+    "items_failed": 2,
+    "estimated_remaining_time": 120
   }
 }
 ```
 
-#### 获取任务结果
-```http
-GET /api/v1/tasks/{task_id}/result
+#### 1.3 获取任务结果
+```bash
+curl "http://localhost:8000/api/v1/tasks/{task_id}/result"
 ```
 
-**响应:**
+**响应示例:**
 ```json
 {
-  "task_id": "uuid-string",
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
   "success": true,
   "message": "任务执行成功",
   "data_count": 98,
@@ -286,74 +303,250 @@ GET /api/v1/tasks/{task_id}/result
   "data": [
     {
       "note_id": "67e6c0c30000000009016264",
-      "title": "美食分享",
-      "author": "用户名",
+      "title": "车漆刮蹭修复技巧分享",
+      "desc": "今天分享一些实用的车漆修复方法...",
+      "nickname": "汽车保养专家",
       "liked_count": 1234,
       "comments_count": 56,
-      "publish_time": "2024-01-01 12:00:00"
+      "publish_time": "2024-01-01 12:00:00",
+      "note_url": "https://www.xiaohongshu.com/explore/67e6c0c30000000009016264"
     }
   ]
 }
 ```
 
-### 2. 数据查询接口
-
-#### 获取内容列表
-```http
-GET /api/v1/data/content/{platform}?source_type=json&limit=20&offset=0
+#### 1.4 停止任务
+```bash
+curl -X DELETE "http://localhost:8000/api/v1/tasks/{task_id}"
 ```
 
-#### 获取内容详情
-```http
-GET /api/v1/data/content/{platform}/{content_id}?source_type=database
+#### 1.5 列出运行中的任务
+```bash
+curl "http://localhost:8000/api/v1/tasks"
 ```
 
-**注意**: `source_type` 默认值为 `database`，如不指定则自动使用Supabase数据库作为数据源。
+### 2. 数据查询 API
 
-#### 搜索内容
-```http
-GET /api/v1/data/search/{platform}?keyword=美食&limit=20
+#### 2.1 获取内容列表
+```bash
+# 获取小红书内容列表（默认使用database数据源）
+curl "http://localhost:8000/api/v1/data/content/xhs?limit=20&offset=0"
+
+# 按任务ID过滤
+curl "http://localhost:8000/api/v1/data/content/xhs?task_id=550e8400-e29b-41d4-a716-446655440000&limit=10"
+
+# 关键词搜索
+curl "http://localhost:8000/api/v1/data/content/xhs?keyword=车漆修复&limit=15"
 ```
 
-#### 获取用户内容
-```http
-GET /api/v1/data/user/{platform}/{user_id}/content?limit=20
+#### 2.2 获取内容详情
+```bash
+# 获取特定笔记详情
+curl "http://localhost:8000/api/v1/data/content/xhs/67e6c0c30000000009016264"
+
+# 指定数据源
+curl "http://localhost:8000/api/v1/data/content/xhs/67e6c0c30000000009016264?source_type=database"
 ```
 
-### 3. 登录管理接口
+#### 2.3 搜索相关 API
 
-#### 创建登录会话
-```http
-POST /api/v1/login/create-session
-{
-  "task_id": "uuid-string",
+**通用搜索接口:**
+```bash
+curl "http://localhost:8000/api/v1/data/search/xhs?keyword=车漆刮蹭修复&limit=20"
+```
+
+**搜索排序结果（来自search_result表）:**
+```bash
+curl "http://localhost:8000/api/v1/data/search/xhs/ranking?keyword=车漆刮蹭修复&limit=20"
+```
+
+**搜索详细内容（来自note表）:**
+```bash
+curl "http://localhost:8000/api/v1/data/search/xhs/details?keyword=车漆刮蹭修复&limit=20"
+```
+
+**组合搜索结果（排序+详情）:**
+```bash
+curl "http://localhost:8000/api/v1/data/search/xhs/combined?keyword=车漆刮蹭修复&limit=10"
+```
+
+**指定笔记ID查询详情:**
+```bash
+curl "http://localhost:8000/api/v1/data/search/xhs/details?keyword=车漆刮蹭修复&note_ids=note1,note2,note3"
+```
+
+#### 2.4 创作者相关 API
+```bash
+# 获取创作者资料
+curl "http://localhost:8000/api/v1/data/creator/xhs/user123456/profile"
+
+# 获取创作者内容
+curl "http://localhost:8000/api/v1/data/creator/xhs/user123456/content?limit=20"
+```
+
+### 3. 登录管理 API
+
+#### 3.1 创建登录会话
+```bash
+curl -X POST "http://localhost:8000/api/v1/login/create-session" \
+-H "Content-Type: application/json" \
+-d '{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
   "platform": "xhs",
   "login_type": "qrcode",
   "timeout": 300
-}
+}'
 ```
 
-#### 获取登录状态
-```http
-GET /api/v1/login/status/{task_id}
+#### 3.2 获取登录状态
+```bash
+curl "http://localhost:8000/api/v1/login/status/550e8400-e29b-41d4-a716-446655440000"
 ```
 
-### 4. 系统管理接口
-
-#### 健康检查
-```http
-GET /api/v1/data/health
+#### 3.3 提交登录输入
+```bash
+curl -X POST "http://localhost:8000/api/v1/login/input/550e8400-e29b-41d4-a716-446655440000" \
+-H "Content-Type: application/json" \
+-d '{
+  "input_type": "phone",
+  "value": "13800138000"
+}'
 ```
 
-#### 获取支持的平台
-```http
-GET /api/v1/data/platforms
+### 4. 系统管理 API
+
+#### 4.1 健康检查
+```bash
+curl "http://localhost:8000/api/v1/data/health"
 ```
 
-#### 获取配置选项
-```http
-GET /api/v1/system/config/options
+#### 4.2 获取支持的平台
+```bash
+curl "http://localhost:8000/api/v1/data/platforms"
 ```
+
+#### 4.3 获取数据源类型
+```bash
+curl "http://localhost:8000/api/v1/data/sources"
+```
+
+#### 4.4 获取配置选项
+```bash
+curl "http://localhost:8000/api/v1/system/config/options"
+```
+
+#### 4.5 系统统计
+```bash
+curl "http://localhost:8000/api/v1/system/stats"
+```
+
+### 5. Cookie管理 API
+
+#### 5.1 获取Cookie状态
+```bash
+curl "http://localhost:8000/api/v1/cookies/xhs/status"
+```
+
+#### 5.2 列出所有Cookies
+```bash
+curl "http://localhost:8000/api/v1/cookies"
+```
+
+#### 5.3 清除平台Cookies
+```bash
+curl -X DELETE "http://localhost:8000/api/v1/cookies/xhs"
+```
+
+## 🛠️ MediaCrawler 命令行工具
+
+除了API接口，本项目还提供原生的MediaCrawler命令行工具，位于 `MediaCrawler/main.py`：
+
+### 基本语法
+```bash
+cd MediaCrawler
+python main.py --platform {平台} --lt {登录方式} [其他参数]
+```
+
+### 命令行参数说明
+- `--platform`: 平台类型 (xhs, dy, ks, bili, wb, tieba, zhihu)
+- `--lt`: 登录类型 (qrcode, phone, cookie)
+- `--keywords`: 搜索关键词 (搜索模式必需)
+- `--note_ids`: 笔记ID列表 (详情模式必需)
+- `--creator_ids`: 创作者ID列表 (创作者模式必需)
+- `--max_count`: 最大采集数量
+- `--headless`: 无头浏览器模式
+- `--enable_proxy`: 启用代理
+- `--save_data_option`: 存储方式 (db, json, csv)
+
+### 使用示例
+
+#### 小红书搜索采集
+```bash
+# 基础搜索
+cd MediaCrawler
+python main.py --platform xhs --lt qrcode --keywords "车漆刮蹭修复" --max_count 50
+
+# 多关键词搜索
+python main.py --platform xhs --lt qrcode --keywords "车漆刮蹭修复,汽车保养,车辆维护" --max_count 100
+
+# 使用代理和无头模式
+python main.py --platform xhs --lt qrcode --keywords "美食推荐" --max_count 30 --headless --enable_proxy
+```
+
+#### 小红书笔记详情采集
+```bash
+# 单个笔记
+python main.py --platform xhs --lt qrcode --note_ids "67e6c0c30000000009016264"
+
+# 多个笔记
+python main.py --platform xhs --lt qrcode --note_ids "note1,note2,note3" --max_comments 50
+```
+
+#### 小红书创作者采集
+```bash
+# 采集创作者内容
+python main.py --platform xhs --lt qrcode --creator_ids "user123456" --max_count 20
+
+# 采集多个创作者
+python main.py --platform xhs --lt qrcode --creator_ids "user1,user2,user3" --max_count 50
+```
+
+#### 数据存储配置
+```bash
+# 保存到数据库 (需要配置环境变量)
+export SEO_SUPABASE_URL="https://your-project.supabase.co"
+export SEO_SUPABASE_ANON_KEY="your-anon-key"
+python main.py --platform xhs --lt qrcode --keywords "美食" --save_data_option db
+
+# 保存到JSON文件
+python main.py --platform xhs --lt qrcode --keywords "旅行" --save_data_option json
+
+# 保存到CSV文件
+python main.py --platform xhs --lt qrcode --keywords "摄影" --save_data_option csv
+```
+
+#### 高级配置示例
+```bash
+# 完整配置示例
+python main.py \
+  --platform xhs \
+  --lt qrcode \
+  --keywords "编程学习,Python教程" \
+  --max_count 200 \
+  --max_comments 30 \
+  --headless \
+  --enable_proxy \
+  --save_data_option db \
+  --timeout 60 \
+  --max_retries 5
+```
+
+### 注意事项
+1. **环境要求**: 确保已安装所有依赖和浏览器驱动
+2. **登录状态**: 首次使用需要扫码或输入验证码登录
+3. **数据存储**: 使用 `--save_data_option db` 时需配置Supabase环境变量
+4. **代理设置**: 启用代理需要配置代理服务商API
+5. **平台限制**: 目前完全支持小红书，其他平台功能有限
 
 ## 📚 使用手册
 
@@ -400,14 +593,13 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 #### 环境变量配置 (`.env`)
 ```bash
-# 数据库配置
-DATABASE_URL=sqlite:///./data/app.db
-SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_key
+# Supabase配置（生产环境必需）
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_supabase_anon_key
 
-# Supabase配置（推荐使用）
-# 主要数据存储使用Supabase PostgreSQL数据库
-# 支持高性能查询和多用户并发访问
+# MediaCrawler命令行工具专用（与API服务器使用相同配置）
+SEO_SUPABASE_URL=https://your-project.supabase.co
+SEO_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # 代理配置
 DEFAULT_ENABLE_PROXY=false
@@ -422,6 +614,13 @@ DEFAULT_TIMEOUT=30
 LOG_LEVEL=INFO
 LOG_FILE=logs/app.log
 ```
+
+**Supabase配置获取步骤：**
+1. 访问 [Supabase Dashboard](https://supabase.com/dashboard)
+2. 选择您的项目
+3. 进入 Settings > API
+4. 复制 Project URL 和 anon/public key
+5. 配置到 `.env` 文件中
 
 #### 平台配置
 每个平台都有默认的配置参数，可以通过 API 请求进行覆盖：
@@ -444,19 +643,21 @@ LOG_FILE=logs/app.log
 
 ### 3. 快速开始
 
+**注意**: 以下示例均基于小红书平台，这是目前唯一完全支持的平台。
+
 #### 示例1: 小红书关键词搜索
 ```python
 import requests
 
-# 创建搜索任务
+# 创建搜索任务（使用数据库存储）
 task_data = {
     "platform": "xhs",
     "task_type": "search", 
-    "keywords": ["美食推荐"],
+    "keywords": ["车漆刮蹭修复"],
     "max_count": 50,
     "max_comments": 20,
     "headless": True,
-    "save_data_option": "json"
+    "save_data_option": "db"  # 推荐使用数据库存储
 }
 
 response = requests.post("http://localhost:8000/api/v1/tasks", json=task_data)
@@ -475,40 +676,71 @@ result = requests.get(f"http://localhost:8000/api/v1/tasks/{task_id}/result")
 print(result.json())
 ```
 
-#### 示例2: 查询已有数据
+#### 示例2: 查询已有数据（使用新的搜索API）
 ```python
 import requests
 
-# 查询小红书内容列表
+# 查询搜索排序结果
 response = requests.get(
-    "http://localhost:8000/api/v1/data/content/xhs",
-    params={"source_type": "json", "limit": 20}
+    "http://localhost:8000/api/v1/data/search/xhs/ranking",
+    params={"keyword": "车漆刮蹭修复", "limit": 20}
 )
+ranking_data = response.json()
 
-data = response.json()
-print(f"找到 {data['total']} 条数据")
-for item in data['data']:
-    print(f"- {item['title']} (点赞: {item['liked_count']})")
+# 查询搜索详细内容
+response = requests.get(
+    "http://localhost:8000/api/v1/data/search/xhs/details", 
+    params={"keyword": "车漆刮蹭修复", "limit": 20}
+)
+details_data = response.json()
+
+# 组合查询
+response = requests.get(
+    "http://localhost:8000/api/v1/data/search/xhs/combined",
+    params={"keyword": "车漆刮蹭修复", "limit": 10}
+)
+combined_data = response.json()
+
+print(f"排序结果: {len(ranking_data['data'])} 条")
+print(f"详细内容: {len(details_data['data'])} 条")
 ```
 
-#### 示例3: 使用自定义配置
+#### 示例3: 小红书笔记详情采集
 ```python
 import requests
 
-# 使用代理和自定义配置
+# 采集特定笔记详情
 task_data = {
-    "platform": "douyin",
-    "task_type": "search",
-    "keywords": ["舞蹈"],
-    "max_count": 30,
+    "platform": "xhs",
+    "task_type": "detail",
+    "content_ids": ["67e6c0c30000000009016264"],
+    "xhs_note_urls": ["https://www.xiaohongshu.com/explore/67e6c0c30000000009016264?xsec_token=ABC&xsec_source=pc_user"],
+    "max_count": 1,
+    "max_comments": 50,
+    "save_data_option": "db",
     "config": {
-        "enable_proxy": True,
-        "proxy_provider": "kuaidaili", 
         "headless": False,
-        "max_retries": 5,
-        "timeout": 60,
-        "delay_range": [3, 6]
+        "max_retries": 3,
+        "timeout": 45
     }
+}
+
+response = requests.post("http://localhost:8000/api/v1/tasks", json=task_data)
+```
+
+#### 示例4: 小红书创作者内容采集
+```python
+import requests
+
+# 采集创作者发布的内容
+task_data = {
+    "platform": "xhs", 
+    "task_type": "creator",
+    "creator_ids": ["user123456"],
+    "max_count": 30,
+    "max_comments": 20,
+    "save_data_option": "db",
+    "headless": True
 }
 
 response = requests.post("http://localhost:8000/api/v1/tasks", json=task_data)
@@ -577,9 +809,15 @@ config = {
 - 使用流式处理大型数据集
 
 #### 存储优化
-- **Supabase (推荐)**: 适合生产环境和多用户场景，支持高性能查询和实时数据同步
-- JSON: 适合小规模数据和快速查询  
-- CSV: 适合大规模数据和数据分析
+- **Database (Supabase) - 强烈推荐**: 
+  - 生产环境首选，支持高性能查询和实时数据同步
+  - 支持复杂的搜索和数据关联操作
+  - 多用户并发访问，数据一致性保障
+  - 自动备份和恢复功能
+- **JSON**: 开发测试环境，适合小规模数据验证
+- **CSV**: 数据分析专用，不推荐作为主要存储方式
+
+**重要**: 生产环境必须使用 `source_type=database`，其他存储方式仅供开发测试使用。
 
 ## 🔧 其他
 

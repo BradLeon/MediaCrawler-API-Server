@@ -12,8 +12,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Testing
 - **Run comprehensive tests**: `python tests/test_comprehensive.py`
 - **Run specific crawler tests**: `python test_xhs_content_crawler.py`
+- **Run search crawler tests**: `python test_xhs_search_crawler.py`
 - **Run data access tests**: `python tests/test_data_access.py`
+- **Test search APIs**: `python test_search_apis.py`
 - **Test API endpoint**: `curl "http://localhost:8000/api/v1/data/content/xhs/66e13f20000000000c01bab3"`
+- **Test search ranking API**: `curl "http://localhost:8000/api/v1/data/search/xhs/ranking?keyword=车漆刮蹭修复&limit=5"`
+- **Test search details API**: `curl "http://localhost:8000/api/v1/data/search/xhs/details?keyword=车漆刮蹭修复&limit=5"`
+- **Test combined search API**: `curl "http://localhost:8000/api/v1/data/search/xhs/combined?keyword=车漆刮蹭修复&limit=5"`
 
 ### Python Environment
 - **Install dependencies**: `pip install -r requirements.txt`
@@ -54,14 +59,26 @@ This is a FastAPI-based social media crawler API server that wraps the existing 
 
 ### Platform Support
 
-Supported platforms (via `PLATFORM_MAPPING` in app/main.py:143):
-- `xhs` - 小红书 (XHS)
-- `douyin` - 抖音 (Douyin) 
-- `bilibili` - B站 (Bilibili)
-- `kuaishou` - 快手 (Kuaishou)
-- `weibo` - 微博 (Weibo)
-- `tieba` - 百度贴吧 (Tieba)
-- `zhihu` - 知乎 (Zhihu)
+**Currently Fully Supported Platform:**
+- `xhs` - 小红书 (XHS) - **完全支持**
+  - ✅ 搜索结果采集 (search)
+  - ✅ 笔记内容采集 (content) 
+  - ✅ 创作者信息采集 (creator)
+  - ✅ 搜索排序API (search ranking)
+  - ✅ 搜索详情API (search details)
+
+**Other Platforms (Limited Support):**
+- `douyin` - 抖音 (Douyin) - 基础功能
+- `bilibili` - B站 (Bilibili) - 基础功能
+- `kuaishou` - 快手 (Kuaishou) - 基础功能
+- `weibo` - 微博 (Weibo) - 基础功能
+- `tieba` - 百度贴吧 (Tieba) - 基础功能
+- `zhihu` - 知乎 (Zhihu) - 基础功能
+
+**Data Source Types:**
+- `database` - Supabase PostgreSQL (推荐，生产环境)
+- `json` - JSON文件存储 (开发测试)
+- `csv` - CSV文件存储 (数据分析)
 
 ### Configuration Files
 
@@ -81,8 +98,21 @@ The system supports multiple data storage backends:
 
 ### API Endpoints Structure
 
+**Task Management:**
 - `/api/v1/tasks` - Main crawler task management
-- `/api/v1/data/` - Data query and retrieval
+- `/api/v1/tasks/{task_id}/status` - Task status monitoring
+- `/api/v1/tasks/{task_id}/result` - Task result retrieval
+
+**Data Query:**
+- `/api/v1/data/content/{platform}` - Content list query
+- `/api/v1/data/content/{platform}/{content_id}` - Content detail query
+- `/api/v1/data/search/{platform}` - General content search
+- `/api/v1/data/search/{platform}/ranking` - Search ranking results (from search_result table)
+- `/api/v1/data/search/{platform}/details` - Search detail content (from note table)
+- `/api/v1/data/search/{platform}/combined` - Combined search results (ranking + details)
+- `/api/v1/data/creator/{platform}/{user_id}` - Creator profile and content
+
+**Platform Management:**
 - `/api/v1/login/` - Platform login management
 - `/api/v1/cookies/` - Cookie management for maintaining sessions
 - `/api/v1/system/` - System statistics and configuration
@@ -120,3 +150,76 @@ Configuration changes should be made through the ConfigManager system to ensure 
 - All database operations use proper error handling and connection management
 
 The system includes comprehensive logging and error handling with structured log output to both console and files in the `logs/` directory.
+
+## MediaCrawler Command Line Tools
+
+The original MediaCrawler project (`MediaCrawler/main.py`) provides direct command-line access to crawling functionality:
+
+### Basic Usage
+```bash
+cd MediaCrawler
+python main.py --platform xhs --lt search --keywords "美食推荐" --max_count 50
+```
+
+### Command Line Parameters
+- `--platform`: Platform type (xhs, dy, ks, bili, wb, tieba, zhihu)
+- `--lt`: Login type (qrcode, phone, cookie)
+- `--keywords`: Search keywords (for search mode)
+- `--max_count`: Maximum items to crawl
+- `--headless`: Run browser in headless mode
+- `--enable_proxy`: Enable proxy usage
+- `--save_data_option`: Data storage option (db, json, csv)
+
+### Search Mode Examples
+```bash
+# XHS search with keywords
+python main.py --platform xhs --lt qrcode --keywords "车漆刮蹭修复,汽车保养" --max_count 100
+
+# Douyin search
+python main.py --platform dy --lt qrcode --keywords "舞蹈教学" --max_count 50
+
+# Bilibili search
+python main.py --platform bili --lt qrcode --keywords "编程教程" --max_count 30
+```
+
+### Detail Mode Examples
+```bash
+# XHS specific note crawling
+python main.py --platform xhs --lt qrcode --note_ids "note_id1,note_id2"
+
+# Douyin video crawling
+python main.py --platform dy --lt qrcode --video_ids "video_id1,video_id2"
+```
+
+### Creator Mode Examples
+```bash
+# XHS creator content crawling
+python main.py --platform xhs --lt qrcode --creator_ids "creator_id1" --max_count 20
+
+# Douyin creator content
+python main.py --platform dy --lt qrcode --creator_ids "creator_id1" --max_count 15
+```
+
+### Database Configuration
+When using `--save_data_option db`, ensure environment variables are set:
+```bash
+export SEO_SUPABASE_URL="https://your-project.supabase.co"
+export SEO_SUPABASE_ANON_KEY="your-anon-key"
+```
+
+### Advanced Configuration
+```bash
+# Using proxy with custom settings
+python main.py --platform xhs --lt qrcode --keywords "美食" \
+  --enable_proxy --proxy_provider kuaidaili \
+  --headless --max_retries 3 --timeout 45
+
+# Save to different formats
+python main.py --platform xhs --lt qrcode --keywords "旅行" \
+  --save_data_option json --max_count 20
+
+# Multiple keywords search
+python main.py --platform xhs --lt qrcode \
+  --keywords "美食推荐,餐厅探店,下午茶" \
+  --max_count 200 --headless
+```

@@ -2,8 +2,8 @@
 
 ## 📋 文档版本
 
-- **版本**: v2.0
-- **更新日期**: 2025-07-25
+- **版本**: v2.1
+- **更新日期**: 2025-07-26
 - **状态**: 稳定版本
 
 ## 🎯 核心改进
@@ -249,9 +249,129 @@ API Request → 配置验证 → 任务创建 → 爬虫执行 → 数据存储 
 
 **查询参数**:
 - `keyword`: 搜索关键词 (必填)
-- `source_type`: 数据源类型，默认 json
+- `source_type`: 数据源类型，默认 database
 - `limit`: 返回数量限制，默认 20
 - `offset`: 偏移量，默认 0
+
+**响应**:
+```json
+{
+  "data": [
+    {
+      "note_id": "67e6c0c30000000009016264",
+      "title": "美食分享",
+      "desc": "今天去了一家很棒的餐厅...",
+      "nickname": "美食达人",
+      "liked_count": 1234,
+      "comments_count": 56
+    }
+  ],
+  "total": 150,
+  "keyword": "美食",
+  "platform": "xhs",
+  "source_type": "database"
+}
+```
+
+#### 2.3.1 获取搜索排序结果
+**端点**: `GET /api/v1/data/search/{platform}/ranking`
+
+**查询参数**:
+- `keyword`: 搜索关键词 (必填)
+- `source_type`: 数据源类型，默认 database
+- `limit`: 返回数量限制，默认 20
+- `offset`: 偏移量，默认 0
+
+**响应**:
+```json
+{
+  "data": [
+    {
+      "id": 9115,
+      "keyword": "车漆刮蹭修复",
+      "search_account": "小红薯67F07F0",
+      "rank": 1,
+      "note_id": "6811ea9100000002102cc49"
+    },
+    {
+      "id": 9116,
+      "keyword": "车漆刮蹭修复", 
+      "search_account": "小红薯67F07F0",
+      "rank": 2,
+      "note_id": "66b95c7a00000001e01aa8c"
+    }
+  ],
+  "total": 20,
+  "keyword": "车漆刮蹭修复",
+  "platform": "xhs",
+  "source_type": "database",
+  "data_type": "search_ranking"
+}
+```
+
+#### 2.3.2 获取搜索详细内容
+**端点**: `GET /api/v1/data/search/{platform}/details`
+
+**查询参数**:
+- `keyword`: 搜索关键词 (必填)
+- `source_type`: 数据源类型，默认 database
+- `limit`: 返回数量限制，默认 20
+- `offset`: 偏移量，默认 0
+- `note_ids`: 指定笔记ID列表(逗号分隔，可选)
+
+**响应**:
+```json
+{
+  "data": [
+    {
+      "note_id": "6811ea9100000002102cc49",
+      "title": "刮擦修复，用它！",
+      "desc": "修复刮蹭的神器推荐...",
+      "type": "video",
+      "nickname": "叶子",
+      "liked_count": 0,
+      "comments_count": 12,
+      "publish_time": "2024-01-01 12:00:00"
+    }
+  ],
+  "total": 20,
+  "keyword": "车漆刮蹭修复",
+  "platform": "xhs",
+  "source_type": "database",
+  "data_type": "search_details"
+}
+```
+
+#### 2.3.3 获取组合搜索结果
+**端点**: `GET /api/v1/data/search/{platform}/combined`
+
+**查询参数**:
+- `keyword`: 搜索关键词 (必填)
+- `source_type`: 数据源类型，默认 database
+- `limit`: 返回数量限制，默认 20
+- `offset`: 偏移量，默认 0
+
+**响应**:
+```json
+{
+  "ranking": {
+    "data": [...],
+    "total": 20,
+    "success": true,
+    "message": "Search ranking retrieved successfully"
+  },
+  "details": {
+    "data": [...],
+    "total": 20,
+    "success": true,
+    "message": "Search details retrieved successfully"
+  },
+  "keyword": "车漆刮蹭修复",
+  "platform": "xhs",
+  "source_type": "database",
+  "data_type": "combined"
+}
+```
 
 #### 2.4 获取用户内容
 **端点**: `GET /api/v1/data/user/{platform}/{user_id}/content`
@@ -541,6 +661,14 @@ API Request → 配置验证 → 任务创建 → 爬虫执行 → 数据存储 
 - 数据查询限制: 1000条/次
 
 ## 📝 更新日志
+
+### v2.1.0 (2025-07-26)
+- 🔍 新增搜索相关API：搜索排序、搜索详情、组合搜索
+- 📊 支持从search_result表和note表分别获取数据
+- 🔄 优化数据查询逻辑，支持智能关联查询
+- 🛡️ 增强QueryFilter支持content_ids参数
+- 📋 完善平台支持说明：XHS完全支持，其他平台基础功能
+- 🗃️ 明确数据源类型：仅开放DATABASE（Supabase）用于生产
 
 ### v2.0.0 (2025-07-25)
 - ✨ 全新的基于 Pydantic 模型的配置管理

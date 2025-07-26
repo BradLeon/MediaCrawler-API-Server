@@ -130,4 +130,24 @@ class CsvDataReader(BaseDataReader):
             
         except Exception as e:
             logger.error(f"Failed to get platform stats: {e}")
-            return {} 
+            return {}
+    
+    async def get_search_ranking(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索排序结果 (CSV格式暂不支持)"""
+        return DataAccessResult(
+            success=False, 
+            message="Search ranking not supported in CSV reader"
+        )
+    
+    async def get_search_details(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索结果的详细内容 (CSV格式暂不支持)"""
+        return DataAccessResult(
+            success=False, 
+            message="Search details not supported in CSV reader"
+        ) 

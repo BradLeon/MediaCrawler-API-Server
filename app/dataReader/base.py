@@ -121,37 +121,44 @@ class PlatformTableMapping:
         PlatformType.XHS: {
             "content": "xhs_note",
             "comment": "xhs_note_comment", 
-            "creator": "xhs_author"
+            "creator": "xhs_author",
+            "search_result": "xhs_search_result"
         },
         PlatformType.DOUYIN: {
             "content": "douyin_aweme",
             "comment": "douyin_aweme_comment",
-            "creator": "dy_creator"
+            "creator": "dy_creator",
+            "search_result": "douyin_search_result"
         },
         PlatformType.BILIBILI: {
             "content": "bilibili_video", 
             "comment": "bilibili_video_comment",
-            "creator": "bilibili_up_info"
+            "creator": "bilibili_up_info",
+            "search_result": "bilibili_search_result"
         },
         PlatformType.KUAISHOU: {
             "content": "kuaishou_video",
             "comment": "kuaishou_video_comment", 
-            "creator": "kuaishou_creator"
+            "creator": "kuaishou_creator",
+            "search_result": "kuaishou_search_result"
         },
         PlatformType.WEIBO: {
             "content": "weibo_note",
             "comment": "weibo_note_comment",
-            "creator": "weibo_creator"
+            "creator": "weibo_creator",
+            "search_result": "weibo_search_result"
         },
         PlatformType.TIEBA: {
             "content": "tieba_note",
             "comment": "tieba_note_comment",
-            "creator": "tieba_creator"
+            "creator": "tieba_creator",
+            "search_result": "tieba_search_result"
         },
         PlatformType.ZHIHU: {
             "content": "zhihu_note", 
             "comment": "zhihu_note_comment",
-            "creator": "zhihu_creator"
+            "creator": "zhihu_creator",
+            "search_result": "zhihu_search_result"
         }
     }
     
@@ -226,13 +233,15 @@ class QueryFilter:
     
     def __init__(self, limit: int = 100, offset: int = 0, task_id: Optional[str] = None, 
                  keyword: Optional[str] = None,
-                 start_time: Optional[datetime] = None, end_time: Optional[datetime] = None):
+                 start_time: Optional[datetime] = None, end_time: Optional[datetime] = None,
+                 content_ids: Optional[List[str]] = None):
         self.limit: int = limit
         self.offset: int = offset
         self.task_id: Optional[str] = task_id
         self.keyword: Optional[str] = keyword
         self.start_time: Optional[datetime] = start_time
         self.end_time: Optional[datetime] = end_time
+        self.content_ids: Optional[List[str]] = content_ids
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -249,6 +258,8 @@ class QueryFilter:
             result["start_time"] = self.start_time.isoformat()
         if self.end_time:
             result["end_time"] = self.end_time.isoformat()
+        if self.content_ids:
+            result["content_ids"] = self.content_ids
             
         return result
 
@@ -316,6 +327,22 @@ class BaseDataReader(ABC):
                            keyword: str,
                            filters: Optional[QueryFilter] = None) -> DataAccessResult:
         """搜索内容"""
+        pass
+
+    @abstractmethod
+    async def get_search_ranking(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索排序结果 (来自search_result表)"""
+        pass
+
+    @abstractmethod
+    async def get_search_details(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索结果的详细内容 (来自note表)"""
         pass
 
     @abstractmethod

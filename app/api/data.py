@@ -3,7 +3,7 @@
 提供爬取数据的查询接口
 """
 from fastapi import APIRouter, HTTPException, Query, Path
-from typing import Dict, Any, List, Optional
+from typing import Optional
 import logging
 
 from app.dataReader.factory import DataReaderFactory
@@ -44,7 +44,7 @@ async def get_platforms():
         platforms = config_manager.get_supported_platforms()
         
         return {
-            "platforms": [platform.dict() for platform in platforms],
+            "platforms": [platform.model_dump() for platform in platforms],
             "total": len(platforms)
         }
     except Exception as e:
@@ -59,7 +59,6 @@ async def get_content_list(
     limit: int = Query(20, description="返回数量限制"),
     offset: int = Query(0, description="偏移量"),
     task_id: Optional[str] = Query(None, description="任务ID过滤"),
-    user_id: Optional[str] = Query(None, description="用户ID过滤"),
     keyword: Optional[str] = Query(None, description="关键词搜索")
 ):
     """获取内容列表"""
@@ -270,7 +269,7 @@ async def search_content(
     limit: int = Query(20, description="返回数量限制"),
     offset: int = Query(0, description="偏移量")
 ):
-    """搜索内容"""
+    """搜索内容 (通用搜索，返回笔记详情)"""
     try:
         # 验证参数
         try:
@@ -313,6 +312,185 @@ async def search_content(
     except Exception as e:
         logger.error(f"Failed to search content: {e}")
         raise HTTPException(status_code=500, detail=f"搜索内容失败: {str(e)}")
+
+
+@router.get("/search/{platform}/ranking")
+async def search_ranking(
+    platform: str = Path(..., description="平台名称"),
+    keyword: str = Query(..., description="搜索关键词"),
+    source_type: str = Query("database", description="数据源类型"),
+    limit: int = Query(20, description="返回数量限制"),
+    offset: int = Query(0, description="偏移量")
+):
+    """获取搜索排序结果 (来自search_result表)"""
+    try:
+        # 验证参数
+        try:
+            data_source = DataSourceType(source_type)
+            platform_type = PlatformType(platform)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"无效的参数: {str(e)}")
+        
+        # 创建数据读取器
+        reader = await DataReaderFactory.get_reader(data_source, platform_type)
+        if not reader:
+            raise HTTPException(status_code=500, detail=f"无法创建{source_type}数据读取器")
+        
+        # 创建查询过滤器
+        filters = QueryFilter(
+            limit=limit,
+            offset=offset,
+            keyword=keyword
+        )
+        
+        # 获取搜索排序结果
+        result = await reader.get_search_ranking(platform_type, keyword, filters)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.message)
+        
+        return {
+            "data": result.data,
+            "total": result.total,
+            "limit": limit,
+            "offset": offset,
+            "platform": platform,
+            "keyword": keyword,
+            "source_type": source_type,
+            "data_type": "search_ranking",
+            "message": result.message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get search ranking: {e}")
+        raise HTTPException(status_code=500, detail=f"获取搜索排序失败: {str(e)}")
+
+
+@router.get("/search/{platform}/details")
+async def search_details(
+    platform: str = Path(..., description="平台名称"),
+    keyword: str = Query(..., description="搜索关键词"),
+    source_type: str = Query("database", description="数据源类型"),
+    limit: int = Query(20, description="返回数量限制"),
+    offset: int = Query(0, description="偏移量"),
+    note_ids: Optional[str] = Query(None, description="指定笔记ID列表(逗号分隔)")
+):
+    """获取搜索结果的详细内容 (来自note表)"""
+    try:
+        # 验证参数
+        try:
+            data_source = DataSourceType(source_type)
+            platform_type = PlatformType(platform)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"无效的参数: {str(e)}")
+        
+        # 创建数据读取器
+        reader = await DataReaderFactory.get_reader(data_source, platform_type)
+        if not reader:
+            raise HTTPException(status_code=500, detail=f"无法创建{source_type}数据读取器")
+        
+        # 解析note_ids
+        note_id_list = []
+        if note_ids:
+            note_id_list = [id.strip() for id in note_ids.split(',') if id.strip()]
+        
+        # 创建查询过滤器
+        filters = QueryFilter(
+            limit=limit,
+            offset=offset,
+            keyword=keyword,
+            content_ids=note_id_list if note_id_list else None
+        )
+        
+        # 获取搜索详情结果
+        result = await reader.get_search_details(platform_type, keyword, filters)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail=result.message)
+        
+        return {
+            "data": result.data,
+            "total": result.total,
+            "limit": limit,
+            "offset": offset,
+            "platform": platform,
+            "keyword": keyword,
+            "note_ids": note_id_list,
+            "source_type": source_type,
+            "data_type": "search_details",
+            "message": result.message
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get search details: {e}")
+        raise HTTPException(status_code=500, detail=f"获取搜索详情失败: {str(e)}")
+
+
+@router.get("/search/{platform}/combined")
+async def search_combined(
+    platform: str = Path(..., description="平台名称"),
+    keyword: str = Query(..., description="搜索关键词"),
+    source_type: str = Query("database", description="数据源类型"),
+    limit: int = Query(20, description="返回数量限制"),
+    offset: int = Query(0, description="偏移量")
+):
+    """获取搜索结果的组合数据 (排序结果+详细内容)"""
+    try:
+        # 验证参数
+        try:
+            data_source = DataSourceType(source_type)
+            platform_type = PlatformType(platform)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"无效的参数: {str(e)}")
+        
+        # 创建数据读取器
+        reader = await DataReaderFactory.get_reader(data_source, platform_type)
+        if not reader:
+            raise HTTPException(status_code=500, detail=f"无法创建{source_type}数据读取器")
+        
+        # 创建查询过滤器
+        filters = QueryFilter(
+            limit=limit,
+            offset=offset,
+            keyword=keyword
+        )
+        
+        # 获取排序结果
+        ranking_result = await reader.get_search_ranking(platform_type, keyword, filters)
+        
+        # 获取详情结果
+        details_result = await reader.get_search_details(platform_type, keyword, filters)
+        
+        return {
+            "ranking": {
+                "data": ranking_result.data if ranking_result.success else [],
+                "total": ranking_result.total if ranking_result.success else 0,
+                "success": ranking_result.success,
+                "message": ranking_result.message
+            },
+            "details": {
+                "data": details_result.data if details_result.success else [],
+                "total": details_result.total if details_result.success else 0,
+                "success": details_result.success,
+                "message": details_result.message
+            },
+            "limit": limit,
+            "offset": offset,
+            "platform": platform,
+            "keyword": keyword,
+            "source_type": source_type,
+            "data_type": "combined"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get combined search results: {e}")
+        raise HTTPException(status_code=500, detail=f"获取组合搜索结果失败: {str(e)}")
 
 
 @router.get("/task/{task_id}/results")

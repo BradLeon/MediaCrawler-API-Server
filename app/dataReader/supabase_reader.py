@@ -302,6 +302,109 @@ class SupabaseDataReader(BaseDataReader):
             logger.error(f"Failed to get platform stats: {e}")
             return {}
     
+    async def get_search_ranking(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索排序结果 (来自search_result表)"""
+        try:
+            if not self.client:
+                return DataAccessResult(False, message="Supabase client not initialized")
+            
+            # 获取搜索结果表名
+            table_name = self.table_mapping.get_table_name(platform, "search_result")
+            
+            # 查询搜索排序数据
+            query = self.client.table(table_name).select("*").eq("keyword", keyword)
+            
+            # 应用其他过滤器
+            if filters:
+                query = self._apply_filters(query, filters)
+            else:
+                query = query.limit(100)
+            
+            # 按排名排序
+            query = query.order("rank", desc=False)
+            
+            response = query.execute()
+            
+            return DataAccessResult(
+                success=True,
+                data=response.data,
+                total=len(response.data),
+                message="Search ranking retrieved successfully"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get search ranking: {e}")
+            return DataAccessResult(False, message=f"Failed to get search ranking: {str(e)}", error=e)
+    
+    async def get_search_details(self,
+                               platform: PlatformType,
+                               keyword: str,
+                               filters: Optional[QueryFilter] = None) -> DataAccessResult:
+        """获取搜索结果的详细内容 (来自note表)"""
+        try:
+            if not self.client:
+                return DataAccessResult(False, message="Supabase client not initialized")
+            
+            # 如果提供了具体的note_ids，直接查询
+            if filters and filters.content_ids:
+                table_name = self.table_mapping.get_table_name(platform, "content")
+                query = self.client.table(table_name).select("*").in_("note_id", filters.content_ids)
+                
+                if filters:
+                    # 不包含分页，因为我们要查询特定的IDs
+                    query = self._apply_filters(query, filters, include_pagination=False)
+                
+                response = query.execute()
+                
+                return DataAccessResult(
+                    success=True,
+                    data=response.data,
+                    total=len(response.data),
+                    message="Search details retrieved successfully"
+                )
+            
+            # 否则，先调用 get_search_ranking 获取排序结果，然后提取note_ids
+            ranking_result = await self.get_search_ranking(platform, keyword, filters)
+            
+            if not ranking_result.success or not ranking_result.data:
+                return DataAccessResult(
+                    success=True,
+                    data=[],
+                    total=0,
+                    message="No search ranking results found for the keyword"
+                )
+            
+            # 提取note_ids
+            note_ids = [item["note_id"] for item in ranking_result.data if item.get("note_id")]
+            
+            if not note_ids:
+                return DataAccessResult(
+                    success=True,
+                    data=[],
+                    total=0,
+                    message="No valid note IDs found in search results"
+                )
+            
+            # 查询note详情
+            content_table = self.table_mapping.get_table_name(platform, "content")
+            content_query = self.client.table(content_table).select("*").in_("note_id", note_ids)
+            
+            content_response = content_query.execute()
+            
+            return DataAccessResult(
+                success=True,
+                data=content_response.data,
+                total=len(content_response.data),
+                message="Search details retrieved successfully"
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to get search details: {e}")
+            return DataAccessResult(False, message=f"Failed to get search details: {str(e)}", error=e)
+    
     def _apply_filters(self, query, filters: QueryFilter, include_pagination: bool = True):
         """应用查询过滤器"""
         if filters.task_id:
