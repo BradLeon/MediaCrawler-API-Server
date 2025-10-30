@@ -96,7 +96,7 @@ class CrawlerTaskRequest(BaseModel):
     start_page: int = Field(default=1, ge=1)
     enable_proxy: bool = False
     headless: bool = False  # 修改默认值为False，显示浏览器窗口
-    enable_comments: bool = True
+    enable_comments: bool = False
     enable_sub_comments: bool = False
     save_data_option: str = Field(default="db", pattern="^(db|json|csv)$")
     config: Optional[CrawlerConfigRequest] = None

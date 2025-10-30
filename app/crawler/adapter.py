@@ -255,6 +255,22 @@ class MediaCrawlerAdapter:
         
         platform_str = self._get_platform_string(task.platform)
         
+        # 🍪 Cookies处理逻辑
+        # 根据 clear_cookies 决定是否保存登录状态
+        save_login_state = not task.clear_cookies
+
+        if task.clear_cookies:
+            # 清除cookies，强制重新登录
+            cookies_manager.clear_cookies(platform_str)
+            logger.info(f"🗑️  已清除cookies，将重新登录: {platform_str}")
+        else:
+            # 检查是否有缓存的cookies
+            cached_cookies = cookies_manager.load_cookies(platform_str, max_age_days=7)
+            if cached_cookies:
+                logger.info(f"🍪 有缓存的cookies可用: {platform_str}")
+            else:
+                logger.info(f"📄 未找到有效cookies，将需要重新登录: {platform_str}")
+
         # 基础命令
         cmd = [
             "python", "main.py",
@@ -264,22 +280,11 @@ class MediaCrawlerAdapter:
             "--max_comments", str(task.max_comments),
             "--headless", str(task.headless).lower(),
             "--enable_proxy", str(task.enable_proxy).lower(),
-            "--save_data_option", task.save_data_option
+            "--save_data_option", task.save_data_option,
+            "--get_comment", str(task.enable_comments).lower(),
+            "--get_sub_comment", str(task.enable_sub_comments).lower(),
+            "--save_login_state", str(save_login_state).lower()
         ]
-        
-        # 🍪 Cookies处理逻辑
-        if task.clear_cookies:
-            # 清除cookies，强制重新登录
-            cookies_manager.clear_cookies(platform_str)
-            logger.info(f"🗑️  已清除cookies，将重新登录: {platform_str}")
-        else:
-            # 检查是否有缓存的cookies（不通过命令行传递，MediaCrawler自动加载）
-            cached_cookies = cookies_manager.load_cookies(platform_str, max_age_days=7)
-            if cached_cookies:
-                # MediaCrawler会自动从browser_data目录加载cookies，避免命令行过长
-                logger.info(f"🍪 有缓存的cookies可用: {platform_str} (MediaCrawler自动加载)")
-            else:
-                logger.info(f"📄 未找到有效cookies，将需要重新登录: {platform_str}")
         
         # 根据任务类型添加特定参数
         if task.task_type == CrawlerTaskType.SEARCH:
@@ -452,10 +457,14 @@ class MediaCrawlerAdapter:
                     f"MediaCrawler执行成功 (数据: {data_count}条, 退出码: {returncode})",
                     data={"final_data_count": data_count, "returncode": returncode}
                 )
-                
+
+                # 尝试从数据库获取实际采集的数据
+                crawled_data = await self._fetch_crawled_data(task, data_count)
+
                 return {
                     "success": True,
                     "data_count": data_count,
+                    "data": crawled_data,  # 添加实际数据
                     "stdout": stdout_text,
                     "stderr": stderr_text,
                     "returncode": returncode,
@@ -651,13 +660,13 @@ class MediaCrawlerAdapter:
             supabase_success_count = len(re.findall(r"Successfully upserted.*?note_id", output))
             if supabase_success_count > 0:
                 return supabase_success_count
-            
+
             # 统计HTTP成功响应
             http_success_count = len(re.findall(r"HTTP/2 (200|201)", output))
             if http_success_count > 0:
                 # 每个笔记通常有一个查询和一个插入，所以除以2
                 return max(1, http_success_count // 2)
-            
+
             # 原有模式匹配
             patterns = [
                 r"共爬取\s*(\d+)\s*条",
@@ -667,16 +676,109 @@ class MediaCrawlerAdapter:
                 r"保存.*?(\d+)\s*条",
                 r"完成.*?(\d+)\s*个"
             ]
-            
+
             for pattern in patterns:
                 matches = re.findall(pattern, output, re.IGNORECASE)
                 if matches:
                     # 返回最大的数字（通常是最终结果）
                     return max(int(match) for match in matches)
-            
+
             return 0
         except Exception:
             return 0
+
+    async def _fetch_crawled_data(self, task: CrawlerTask, expected_count: int) -> List[Dict]:
+        """
+        从数据库获取任务采集的数据
+        Args:
+            task: 爬虫任务
+            expected_count: 预期的数据数量
+        Returns:
+            采集的数据列表
+        """
+        try:
+            from app.dataReader.factory import DataReaderFactory
+            from app.dataReader.base import DataSourceType, PlatformType
+
+            # 获取平台字符串并转换为枚举
+            platform_str = self._get_platform_string(task.platform)
+
+            # 将字符串转换为枚举类型
+            platform_enum = PlatformType.XHS if platform_str == "xhs" else PlatformType.XHS
+
+            # 创建数据读取器（默认使用database）
+            reader = await DataReaderFactory.create_data_reader(
+                source_type=DataSourceType.DATABASE,  # 使用枚举
+                platform=platform_enum  # 使用枚举
+            )
+
+            # 根据任务类型获取数据
+            data = []
+
+            if task.task_type == CrawlerTaskType.DETAIL:
+                # 获取指定的笔记详情
+                # 优先使用 content_ids，如果没有则从 xhs_note_urls 提取
+                content_ids_to_fetch = task.content_ids if task.content_ids else []
+
+                # 如果是小红书且有 xhs_note_urls，从 URL 中提取 note_id
+                if platform_str == "xhs" and task.xhs_note_urls:
+                    import re
+                    for url in task.xhs_note_urls[:expected_count]:
+                        # 从 URL 中提取 note_id: /explore/{note_id}?...
+                        match = re.search(r'/explore/([a-f0-9]+)', url)
+                        if match:
+                            content_ids_to_fetch.append(match.group(1))
+
+                for content_id in content_ids_to_fetch[:expected_count]:
+                    try:
+                        result = await reader.get_content_by_id(
+                            platform=platform_enum,
+                            content_id=content_id
+                        )
+                        if result.success and result.data:
+                            data.append(result.data)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch content {content_id}: {e}")
+
+            elif task.task_type == CrawlerTaskType.SEARCH and task.keywords:
+                # 获取搜索结果 - 获取最近的内容
+                try:
+                    from app.dataReader.base import QueryFilter, SortOrder
+
+                    filter_obj = QueryFilter(
+                        limit=expected_count,
+                        sort_field="last_update_time",
+                        sort_order=SortOrder.DESC
+                    )
+                    result = await reader.get_content_list(
+                        platform=platform_enum,
+                        filters=filter_obj
+                    )
+                    if result.success and result.data:
+                        data.extend(result.data)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch search results: {e}")
+
+            elif task.task_type == CrawlerTaskType.CREATOR and task.creator_ids:
+                # 获取创作者的内容
+                for creator_id in task.creator_ids:
+                    try:
+                        result = await reader.get_creator_content(
+                            platform=platform_enum,
+                            user_id=creator_id
+                        )
+                        if result.success and result.data:
+                            data.append(result.data)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch creator {creator_id} contents: {e}")
+
+            logger.info(f"Successfully fetched {len(data)} items from database")
+            return data
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch crawled data from database: {e}")
+            # 如果数据库读取失败，返回空列表但不影响任务成功状态
+            return []
     
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """获取任务状态"""
