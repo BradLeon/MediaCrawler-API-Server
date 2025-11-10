@@ -395,16 +395,63 @@ class MediaCrawlerAdapter:
                         await self._parse_progress_from_line(line_text, task_logger)
             
             async def read_stderr():
-                """读取错误输出"""
+                """
+                智能读取stderr，区分日志级别
+                Python的logging默认将INFO及以上日志输出到stderr，需要区分真正的错误
+                """
+                import re
+
                 async for line in process.stderr:
                     line_text = line.decode('utf-8', errors='ignore').strip()
-                    if line_text:
-                        stderr_lines.append(line_text)
-                        # 记录错误日志
-                        task_logger.log_event(
-                            TaskEventType.CRAWLER_ERROR,
-                            f"MediaCrawler stderr: {line_text}"
-                        )
+                    if not line_text:
+                        continue
+
+                    stderr_lines.append(line_text)
+
+                    # 解析日志格式: "2025-11-10 17:35:55 MediaCrawler INFO (core.py:721) - message"
+                    log_match = re.search(
+                        r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+\w+\s+(ERROR|WARNING|INFO|DEBUG)\s+\([^)]+\)\s*-\s*(.+)',
+                        line_text
+                    )
+
+                    if log_match:
+                        log_level = log_match.group(2)
+                        log_message = log_match.group(3)
+
+                        # 根据日志级别分类处理
+                        if log_level in ('ERROR', 'CRITICAL'):
+                            # 真正的错误才记录为CRAWLER_ERROR
+                            task_logger.log_event(
+                                TaskEventType.CRAWLER_ERROR,
+                                f"MediaCrawler error: {log_message}"
+                            )
+                        elif log_level == 'WARNING':
+                            # 警告记录为进度信息
+                            task_logger.log_event(
+                                TaskEventType.TASK_PROGRESS,
+                                f"MediaCrawler warning: {log_message}"
+                            )
+                        # INFO和DEBUG日志不作为事件记录，避免日志污染
+                        # 它们已经在stderr_lines中保存，可以在需要时查看
+                    else:
+                        # 未识别格式的stderr输出 - 检查是否包含明显错误关键词
+                        error_keywords = [
+                            'Traceback (most recent call last)',  # Python异常追踪
+                            'Exception:',
+                            'RuntimeError:',
+                            'ValueError:',
+                            'TypeError:',
+                            'KeyError:',
+                            'AttributeError:',
+                            'fatal error',  # 系统级错误
+                            'CRITICAL'
+                        ]
+
+                        if any(keyword in line_text for keyword in error_keywords):
+                            task_logger.log_event(
+                                TaskEventType.CRAWLER_ERROR,
+                                f"MediaCrawler stderr: {line_text}"
+                            )
             
             # 并发读取stdout和stderr
             await asyncio.gather(read_stdout(), read_stderr())
@@ -425,29 +472,59 @@ class MediaCrawlerAdapter:
             
             # 检查是否成功：优先检查成功标志，其次检查退出码
             success_indicators = [
-                "Successfully upserted",  # 数据库插入成功
-                "Xhs Crawler finished",   # 爆取器正常结束
-                "Stop xiaohongshu crawler successful",  # 爆取器正常停止
+                "Successfully upserted",  # 数据库upsert成功
+                "Successfully inserted",  # 数据库insert成功（搜索结果）
+                "Xhs Crawler finished",   # 爬取器正常结束
+                "Stop xiaohongshu crawler successful",  # 爬取器正常停止
                 "task_completed",         # 任务完成事件
                 "MediaCrawler执行成功",  # 明确的成功消息
             ]
             
-            # 检查错误指示器
+            # 检查错误指示器（更精确的匹配，避免误判INFO日志）
             error_indicators = [
                 "Failed to",
-                "Error:",
-                "Exception:",
-                "Traceback",
-                "执行失败"
+                "RuntimeError:",
+                "ValueError:",
+                "TypeError:",
+                "KeyError:",
+                "Traceback (most recent call last)",  # 完整的Python异常追踪开始标志
+                "执行失败",
+                "CRITICAL"
             ]
-            
+
             has_success_indicator = any(indicator in combined_output for indicator in success_indicators)
-            has_error_indicator = any(indicator in combined_output for indicator in error_indicators)
+
+            # 更严格的错误检查：确保不是INFO日志中的错误描述
+            has_error_indicator = False
+            for indicator in error_indicators:
+                if indicator in combined_output:
+                    # 检查上下文，确保不是INFO/DEBUG日志
+                    # 在indicator前后各取50个字符作为上下文
+                    import re
+                    context_pattern = f'.{{0,50}}{re.escape(indicator)}.{{0,50}}'
+                    context_matches = re.findall(context_pattern, combined_output, re.DOTALL)
+
+                    for context in context_matches:
+                        # 如果上下文中包含INFO或DEBUG，则不算错误
+                        if 'INFO' not in context and 'DEBUG' not in context:
+                            has_error_indicator = True
+                            logger.debug(f"[错误检查] 发现真正的错误标志: {indicator}")
+                            break
+
+                    if has_error_indicator:
+                        break
+
             has_data_operations = "HTTP/2 201 Created" in stderr_text or "HTTP/2 200 OK" in stderr_text
             clean_exit = returncode == 0
-            
-            # 判断任务是否成功：有成功标志或数据操作成功，且没有严重错误
+
+            # 判断任务是否成功：有成功标志或数据操作成功或正常退出，且没有真正的错误
             is_success = (has_success_indicator or has_data_operations or clean_exit) and not has_error_indicator
+
+            logger.debug(
+                f"[成功判断] success_indicator={has_success_indicator}, "
+                f"data_operations={has_data_operations}, clean_exit={clean_exit}, "
+                f"error_indicator={has_error_indicator}, final_success={is_success}"
+            )
             
             if is_success:
                 # 更新最终进度状态
@@ -652,22 +729,47 @@ class MediaCrawlerAdapter:
             pass
     
     def _parse_data_count_from_output(self, output: str) -> int:
-        """从输出中解析数据数量"""
+        """
+        从输出中解析数据数量
+        优先级顺序：明确的成功消息 > upsert计数 > HTTP操作区分 > 模式匹配
+        """
         try:
             import re
-            # 查找类似 "共爬取 123 条数据" 的模式
-            # 特殊处理：统计Supabase操作成功次数
-            supabase_success_count = len(re.findall(r"Successfully upserted.*?note_id", output))
-            if supabase_success_count > 0:
-                return supabase_success_count
 
-            # 统计HTTP成功响应
-            http_success_count = len(re.findall(r"HTTP/2 (200|201)", output))
-            if http_success_count > 0:
-                # 每个笔记通常有一个查询和一个插入，所以除以2
-                return max(1, http_success_count // 2)
+            # 优先级1: 匹配明确的插入/upsert成功消息
+            # "Successfully inserted 22 search_results" (搜索结果)
+            insert_match = re.search(r"Successfully inserted (\d+)", output)
+            if insert_match:
+                count = int(insert_match.group(1))
+                logger.debug(f"[数据量解析] 匹配到 'Successfully inserted': {count}条")
+                return count
 
-            # 原有模式匹配
+            # "Successfully upserted xhs_note for note_id: xxx" (笔记详情)
+            # 统计Supabase upsert操作成功次数
+            upsert_count = len(re.findall(r"Successfully upserted.*?note_id", output))
+            if upsert_count > 0:
+                logger.debug(f"[数据量解析] 匹配到 upsert 操作: {upsert_count}次")
+                return upsert_count
+
+            # 优先级2: 区分HTTP操作类型（更精确）
+            # HTTP/2 201 = 插入操作, HTTP/2 200 = 查询操作
+            http_201_count = len(re.findall(r"HTTP/2 201", output))
+            http_200_count = len(re.findall(r"HTTP/2 200", output))
+
+            if http_201_count > 0:
+                # 情况1: 只有插入操作（搜索结果）→ 直接返回插入次数
+                if http_200_count == 0:
+                    logger.debug(f"[数据量解析] 纯插入操作: {http_201_count}次 (搜索结果场景)")
+                    return http_201_count
+
+                # 情况2: 同时有查询和插入（笔记详情）→ 除以2
+                # 因为每个笔记有：1次查询(200) + 1次插入(201)
+                else:
+                    count = http_201_count // 2
+                    logger.debug(f"[数据量解析] 查询+插入操作: 201={http_201_count}, 200={http_200_count}, 数据量={count}")
+                    return max(1, count)
+
+            # 优先级3: 原有模式匹配
             patterns = [
                 r"共爬取\s*(\d+)\s*条",
                 r"获取\s*(\d+)\s*条数据",
@@ -680,11 +782,15 @@ class MediaCrawlerAdapter:
             for pattern in patterns:
                 matches = re.findall(pattern, output, re.IGNORECASE)
                 if matches:
-                    # 返回最大的数字（通常是最终结果）
-                    return max(int(match) for match in matches)
+                    count = max(int(match) for match in matches)
+                    logger.debug(f"[数据量解析] 模式匹配 '{pattern}': {count}条")
+                    return count
 
+            logger.debug("[数据量解析] 未找到任何数据量标志，返回0")
             return 0
-        except Exception:
+
+        except Exception as e:
+            logger.warning(f"[数据量解析] 解析失败: {e}")
             return 0
 
     async def _fetch_crawled_data(self, task: CrawlerTask, expected_count: int) -> List[Dict]:
