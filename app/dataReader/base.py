@@ -32,6 +32,12 @@ class DataSourceType(Enum):
     JSON = "json"         # JSON文件
 
 
+class SortOrder(Enum):
+    """排序方向枚举"""
+    ASC = "asc"   # 升序
+    DESC = "desc"  # 降序
+
+
 @dataclass
 class DataReaderConfig:
     """数据读取器配置类"""
@@ -230,11 +236,12 @@ class PlatformTableMapping:
 
 class QueryFilter:
     """查询过滤器类"""
-    
-    def __init__(self, limit: int = 100, offset: int = 0, task_id: Optional[str] = None, 
+
+    def __init__(self, limit: int = 100, offset: int = 0, task_id: Optional[str] = None,
                  keyword: Optional[str] = None,
                  start_time: Optional[datetime] = None, end_time: Optional[datetime] = None,
-                 content_ids: Optional[List[str]] = None):
+                 content_ids: Optional[List[str]] = None,
+                 sort_field: Optional[str] = None, sort_order: Optional[SortOrder] = None):
         self.limit: int = limit
         self.offset: int = offset
         self.task_id: Optional[str] = task_id
@@ -242,6 +249,8 @@ class QueryFilter:
         self.start_time: Optional[datetime] = start_time
         self.end_time: Optional[datetime] = end_time
         self.content_ids: Optional[List[str]] = content_ids
+        self.sort_field: Optional[str] = sort_field
+        self.sort_order: Optional[SortOrder] = sort_order
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -249,7 +258,7 @@ class QueryFilter:
             "limit": self.limit,
             "offset": self.offset
         }
-        
+
         if self.task_id:
             result["task_id"] = self.task_id
         if self.keyword:
@@ -260,7 +269,11 @@ class QueryFilter:
             result["end_time"] = self.end_time.isoformat()
         if self.content_ids:
             result["content_ids"] = self.content_ids
-            
+        if self.sort_field:
+            result["sort_field"] = self.sort_field
+        if self.sort_order:
+            result["sort_order"] = self.sort_order.value
+
         return result
 
 

@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 import aiofiles
 
-from app.dataReader.base import BaseDataReader, DataAccessResult, DataReaderConfig, PlatformType, ReaderMetrics, QueryFilter
+from app.dataReader.base import BaseDataReader, DataAccessResult, DataReaderConfig, PlatformType, ReaderMetrics, QueryFilter, SortOrder
 
 logger = logging.getLogger(__name__)
 

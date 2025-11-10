@@ -14,12 +14,13 @@ from supabase import create_client, Client
 from app.core.database import get_supabase_client, check_supabase_connection
 from app.core.config import get_settings
 from .base import (
-    BaseDataReader, 
-    DataAccessResult, 
+    BaseDataReader,
+    DataAccessResult,
     DataReaderConfig,
-    QueryFilter, 
+    QueryFilter,
     PlatformType,
-    ReaderMetrics
+    ReaderMetrics,
+    SortOrder
 )
 
 logger = logging.getLogger(__name__)
@@ -413,10 +414,15 @@ class SupabaseDataReader(BaseDataReader):
             query = query.gte("created_at", filters.start_time.isoformat())
         if filters.end_time:
             query = query.lte("created_at", filters.end_time.isoformat())
-        
+
+        # 应用排序
+        if filters.sort_field:
+            desc = filters.sort_order == SortOrder.DESC if filters.sort_order else False
+            query = query.order(filters.sort_field, desc=desc)
+
         if include_pagination:
             query = query.range(filters.offset, filters.offset + filters.limit - 1)
-        
+
         return query
     
     def get_table_name(self, data_type: str) -> str:

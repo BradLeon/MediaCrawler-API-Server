@@ -11,7 +11,8 @@ from .base import (
     DataSourceType,
     PlatformType,
     QueryFilter,
-    ReaderMetrics
+    ReaderMetrics,
+    SortOrder
 )
 from .factory import DataReaderFactory
 from .json_reader import JsonDataReader
@@ -21,18 +22,19 @@ from .supabase_reader import SupabaseDataReader
 __all__ = [
     # 基础类
     "BaseDataReader",
-    "DataAccessResult", 
+    "DataAccessResult",
     "DataReaderConfig",
     "DataSourceType",
     "PlatformType",
     "QueryFilter",
     "ReaderMetrics",
-    
+    "SortOrder",
+
     # 工厂类
     "DataReaderFactory",
-    
+
     # 读取器实现
     "JsonDataReader",
-    "CsvDataReader", 
+    "CsvDataReader",
     "SupabaseDataReader"
 ] 

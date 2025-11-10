@@ -11,12 +11,13 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 
 from .base import (
-    BaseDataReader, 
-    DataAccessResult, 
+    BaseDataReader,
+    DataAccessResult,
     DataReaderConfig,
-    QueryFilter, 
+    QueryFilter,
     PlatformType,
-    ReaderMetrics
+    ReaderMetrics,
+    SortOrder
 )
 
 logger = logging.getLogger(__name__)
@@ -330,27 +331,27 @@ class JsonDataReader(BaseDataReader):
         """应用查询过滤器"""
         if not filters:
             return data
-        
+
         filtered_data = []
-        
+
         for item in data:
             if not isinstance(item, dict):
                 continue
-            
+
             # 应用各种过滤条件
             if filters.task_id and item.get("task_id") != filters.task_id:
                 continue
-            
-            
+
+
             if filters.keyword:
                 # 在标题和描述中搜索关键词
                 title = str(item.get("title", "")).lower()
                 desc = str(item.get("desc", "")).lower()
                 keyword = filters.keyword.lower()
-                
+
                 if keyword not in title and keyword not in desc:
                     continue
-            
+
             # 时间过滤（如果有时间字段）
             if filters.start_time or filters.end_time:
                 item_time = self._parse_item_time(item)
@@ -359,9 +360,20 @@ class JsonDataReader(BaseDataReader):
                         continue
                     if filters.end_time and item_time > filters.end_time:
                         continue
-            
+
             filtered_data.append(item)
-        
+
+        # 应用排序
+        if filters.sort_field and filtered_data:
+            reverse = filters.sort_order == SortOrder.DESC if filters.sort_order else False
+            try:
+                filtered_data.sort(
+                    key=lambda x: x.get(filters.sort_field, 0),
+                    reverse=reverse
+                )
+            except Exception as e:
+                logger.warning(f"Failed to sort by {filters.sort_field}: {e}")
+
         return filtered_data
     
     def _parse_item_time(self, item: Dict) -> Optional[datetime]:
