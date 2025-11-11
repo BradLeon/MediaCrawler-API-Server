@@ -847,23 +847,39 @@ class MediaCrawlerAdapter:
                         logger.warning(f"Failed to fetch content {content_id}: {e}")
 
             elif task.task_type == CrawlerTaskType.SEARCH and task.keywords:
-                # 获取搜索结果 - 获取最近的内容
+                # 获取搜索结果详情 - 使用 keyword 过滤（正确方法）
                 try:
                     from app.dataReader.base import QueryFilter, SortOrder
 
+                    # 获取第一个关键词（搜索任务通常只有一个关键词）
+                    keyword = task.keywords[0] if isinstance(task.keywords, list) else task.keywords
+
+                    logger.info(f"Fetching search results for keyword: '{keyword}', expected count: {expected_count}")
+
+                    # 创建查询过滤器 - 按 rank 排序
                     filter_obj = QueryFilter(
                         limit=expected_count,
-                        sort_field="last_update_time",
-                        sort_order=SortOrder.DESC
+                        sort_field="rank",        # 按排名排序
+                        sort_order=SortOrder.ASC  # 升序（排名1在最前）
                     )
-                    result = await reader.get_content_list(
+
+                    # 使用 get_search_details 方法
+                    # 先查 xhs_search_result (WHERE keyword = ?)
+                    # 再查 xhs_note (WHERE note_id IN ?)
+                    result = await reader.get_search_details(
                         platform=platform_enum,
+                        keyword=keyword,
                         filters=filter_obj
                     )
+
                     if result.success and result.data:
                         data.extend(result.data)
+                        logger.info(f"Successfully fetched {len(result.data)} search results for keyword: '{keyword}'")
+                    else:
+                        logger.warning(f"No search results found for keyword: '{keyword}'")
+
                 except Exception as e:
-                    logger.warning(f"Failed to fetch search results: {e}")
+                    logger.warning(f"Failed to fetch search results for keyword '{keyword}': {e}")
 
             elif task.task_type == CrawlerTaskType.CREATOR and task.creator_ids:
                 # 获取创作者的内容
